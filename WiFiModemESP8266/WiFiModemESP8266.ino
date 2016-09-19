@@ -1,5 +1,5 @@
 /*
-Commodore 64 - MicroView - Wi-Fi Cart
+Commodore 64/128 - WiFiModem ESP8266
 Copyright 2015-2016 Leif Bloomquist and Alex Burger
 
 This program is free software; you can redistribute it and/or modify
@@ -21,15 +21,19 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 /* Written with assistance and code from Greg Alekel and Payton Byrd */
 
 /* ChangeLog
+Sept 18th, 2016: Alex Burger
+- Change Hayes/Menu selection to variable.
+
 Feb 24th, 2016: Alex Burger
 - Initial port of 0.12b5 with Hayes, Menu, but no incoming connections.
 - Flow control not working properly.
 */
 
-/* TODO
-*  -at&f&c1 causes DCD to go high when &f is processed, then low again when &c1 is processed.
-*
-*
+/* TODO /issues
+-Can't connect to hosts on local network, but can connect via default gateway.
+-at&f&c1 causes DCD to go high when &f is processed, then low again when &c1 is processed.
+
+
 */
 
 //#define MICROVIEW        // define to include MicroView display library and features
@@ -152,6 +156,8 @@ boolean escapeReceived = false;
 #define ESCAPE_GUARD_TIME 1000
 
 char autoConnectHost = 0;
+int mode_Hayes = 1;    // 0 = Meny, 1 = Hayes
+
 //boolean autoConnectedAtBootAlready = 0;           // We only want to auto-connect once..
 #define ADDR_HOST_SIZE              40
 #define ADDR_ANSWER_MESSAGE_SIZE    75              // Currently limited by the AT command line buffer size which is 80..
@@ -160,7 +166,7 @@ char autoConnectHost = 0;
 // EEPROM Addresses
 // Microview has 1K
 #define ADDR_PETSCII       0
-//#define ADDR_AUTOSTART     1
+#define ADDR_HAYES_MENU    1
 #define ADDR_BAUD_LO       2
 #define ADDR_BAUD_HI       3
 #define ADDR_MODEM_ECHO         10
@@ -186,7 +192,7 @@ char autoConnectHost = 0;
 #define ADDR_ANSWER_MESSAGE     800    // to 874 with ADDR_ANSWER_MESSAGE_SIZE = 75
 
 // Hayes variables
-#ifdef HAYES
+//#ifdef HAYES
 boolean Modem_isCommandMode = true;
 boolean Modem_isRinging = false;
 boolean Modem_EchoOn = true;
@@ -201,7 +207,7 @@ char Modem_LastCommandBuffer[COMMAND_BUFFER_SIZE];
 char Modem_CommandBuffer[COMMAND_BUFFER_SIZE];
 char Modem_LastCommandChar;
 boolean Modem_AT_Detected = false;
-#endif    // HAYES
+//#endif    // HAYES
 char    Modem_S2_EscapeCharacter = '+';
 boolean Modem_isConnected = false;
 
@@ -218,18 +224,18 @@ boolean Modem_isCtsRtsInverted = true;           // Normally true on the C64.  F
 boolean isFirstChar = true;
 boolean isTelnet = false;
 boolean telnetBinaryMode = false;
-#ifdef HAYES
+//#ifdef HAYES
 boolean petscii_mode_guess = false;
 boolean commodoreServer38k = false;
-#endif
+//#endif
 //int max_buffer_size_reached = 0;            // For debugging 1200 baud buffer
 
 /* PETSCII state.  Always use ASCII for Hayes.
 To set SSID, user must use ASCII mode.
 */
-#ifndef HAYES
+//#ifndef HAYES
 boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
-#endif
+//#endif
 
 // Autoconnect Options
 #define AUTO_NONE     0
@@ -362,9 +368,10 @@ void loop()
 
     //WiFiClient WifiSerial;
 
-    //
-
-
+    // Menu or Hayes AT command mode
+    //mode_Hayes = EEPROM.read(ADDR_HAYES_MENU);
+    if (mode_Hayes < 0 || mode_Hayes > 1)
+        mode_Hayes = 0;
 
 
     //baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
@@ -373,11 +380,16 @@ void loop()
     //WifiSerial.begin(WiFly_BAUD_RATE);
 
     C64Serial.println();
-#ifdef HAYES
-    DisplayBoth(F("WI-FI INIT..."));
-#else
-    DisplayBoth(F("Wi-Fi Init..."));
-#endif
+//#ifdef HAYES
+//    DisplayBoth(F("WI-FI INIT..."));
+//#else
+//    DisplayBoth(F("Wi-Fi Init..."));
+//#endif
+
+    if(mode_Hayes)
+        DisplayBoth(F("WI-FI INIT..."));
+    else
+        DisplayBoth(F("Wi-Fi Init..."));
 
 #ifdef DEBUG
     //boolean ok = wifly.begin(&WifiSerial, &C64Serial);
@@ -388,19 +400,27 @@ void loop()
     //
     if (true)
     {
-#ifdef HAYES
-        DisplayBoth(F("WI-FI OK!"));
-#else
-        DisplayBoth(F("Wi-Fi OK!"));
-#endif
+//#ifdef HAYES
+//        DisplayBoth(F("WI-FI OK!"));
+//#else
+//        DisplayBoth(F("Wi-Fi OK!"));
+//#endif
+        if(mode_Hayes)
+            DisplayBoth(F("WI-FI OK!"));
+        else
+            DisplayBoth(F("Wi-Fi OK!"));
     }
     else
     {
-#ifdef HAYES
-        DisplayBoth(F("WI-FI FAILED!"));
-#else
-        DisplayBoth(F("Wi-Fi Failed!"));
-#endif
+//#ifdef HAYES
+//        DisplayBoth(F("WI-FI FAILED!"));
+//#else
+//        DisplayBoth(F("Wi-Fi Failed!"));
+//#endif
+        if (mode_Hayes)
+            DisplayBoth(F("WI-FI FAILED!"));
+        else
+            DisplayBoth(F("Wi-Fi Failed!"));
         //RawTerminalMode();
     }
 
@@ -419,87 +439,93 @@ void loop()
     //wifly.stop();
 
     autoConnectHost = EEPROM.read(ADDR_HOST_AUTO);
-#ifndef HAYES        
-    Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
-    HandleAutoStart();
-#endif  // HAYES
+//#ifndef HAYES
+    if (!mode_Hayes) {
+        Modem_flowControl = EEPROM.read(ADDR_MODEM_FLOW);
+        HandleAutoStart();
+    }
+//#endif  // HAYES
 
     //C64Println();
-#ifdef HAYES
-    //C64Println(F("\r\nCommodore Wi-Fi Modem Hayes Emulation"));
-    C64Println(F("\r\COMMODORE WI-FI MODEM HAYES EMULATION"));
-    //ShowPETSCIIMode();
-    C64Println();
-    ShowInfo(true);
-    HayesEmulationMode();
-#else
-    C64Println(F("\r\nCommodore Wi-Fi Modem"));
-    C64Println();
-    ShowInfo(true);
+//#ifdef HAYES
+    if (mode_Hayes) {
+        //C64Println(F("\r\nCommodore Wi-Fi Modem Hayes Emulation"));
+        C64Println(F("\r\COMMODORE WI-FI MODEM HAYES EMULATION"));
+        //ShowPETSCIIMode();
+        C64Println();
+        ShowInfo(true);
+        HayesEmulationMode();
+    }
+    else {
+        //#else
+        C64Println(F("\r\nCommodore Wi-Fi Modem"));
+        C64Println();
+        ShowInfo(true);
 
-    while (1)
-    {
-        Display(F("READY."));
-
-        // Clear phonebook.  TODO:  On ESP8266-07, 2) menu popped up and disappeared.  ASCII response to garbage?
-        /*
-        for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
+        while (1)
         {
-            updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
-        }
-        */
+            Display(F("READY."));
 
-        ShowPETSCIIMode();
-        C64Print(F("1. Telnet to host or BBS\r\n"
-            "2. Phone Book\r\n"
-            "3. Wait for incoming connection\r\n"
-            "4. Configuration\r\n"
-            "\r\n"
-            "Select: "));
+            // Clear phonebook.  TODO:  On ESP8266-07, 2) menu popped up and disappeared.  ASCII response to garbage?
+            /*
+            for (int i = 0; i < ADDR_HOST_ENTRIES; i++)
+            {
+                updateEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE), "\0");
+            }
+            */
 
-        int option = ReadByte(C64Serial);
-        C64Serial.println((char)option);
+            ShowPETSCIIMode();
+            C64Print(F("1. Telnet to host or BBS\r\n"
+                "2. Phone Book\r\n"
+                "3. Wait for incoming connection\r\n"
+                "4. Configuration\r\n"
+                "\r\n"
+                "Select: "));
 
-        switch (option)
-        {
-        case '1':
-            DoTelnet();
-            break;
+            int option = ReadByte(C64Serial);
+            C64Serial.println((char)option);
 
-        case '2':
-            PhoneBook();
-            break;
+            switch (option)
+            {
+            case '1':
+                DoTelnet();
+                break;
 
-        //case '3':
-            //Incoming();
-            //break;
+            case '2':
+                PhoneBook();
+                break;
 
-        case '4':
-            Configuration();
-            break;
+                //case '3':
+                    //Incoming();
+                    //break;
 
-        case '\n':
-        case '\r':
-        case ' ':
-            break;
+            case '4':
+                Configuration();
+                break;
 
-        case 8:
-            SetPETSCIIMode(false);
-            break;
+            case '\n':
+            case '\r':
+            case ' ':
+                break;
 
-        case 20:
-            SetPETSCIIMode(true);
-            break;
+            case 8:
+                SetPETSCIIMode(false);
+                break;
 
-        default:
-            C64Println(F("Unknown option, try again"));
-            break;
+            case 20:
+                SetPETSCIIMode(true);
+                break;
+
+            default:
+                C64Println(F("Unknown option, try again"));
+                break;
+            }
         }
     }
-#endif // HAYES
+//#endif // HAYES
 }
 
-#ifndef HAYES
+//#ifndef HAYES
 void Configuration()
 {
     while (true)
@@ -763,7 +789,7 @@ void PhoneBook()
     }
 }
 
-#endif  // HAYES
+//#endif  // HAYES
 
 // ----------------------------------------------------------
 // MicroView Display helpers
@@ -811,18 +837,21 @@ void DisplayBothP(const char *message)
 
 void C64Print(String message)
 {
-#ifdef HAYES
-    C64Serial.print(message);
-#else
-    if (petscii_mode)
-    {
-        C64Serial.print(petscii::ToPETSCII(message.c_str()));
-    }
-    else
-    {
+//#ifdef HAYES
+    if (mode_Hayes)
         C64Serial.print(message);
+    else {
+//#else
+        if (petscii_mode)
+        {
+            C64Serial.print(petscii::ToPETSCII(message.c_str()));
+        }
+        else
+        {
+            C64Serial.print(message);
+        }
     }
-#endif
+//#endif
 }
 
 void C64Println(String message)
@@ -834,18 +863,21 @@ void C64Println(String message)
 // Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
 void C64PrintP(const char *message)
 {
-#ifdef HAYES
-    C64Serial.print(message);
-#else
-    if (petscii_mode)
-    {
-        C64Serial.print(petscii::ToPETSCII(message));
-    }
-    else
-    {
+//#ifdef HAYES
+    if (mode_Hayes)
         C64Serial.print(message);
+    else {
+        //#else
+        if (petscii_mode)
+        {
+            C64Serial.print(petscii::ToPETSCII(message));
+        }
+        else
+        {
+            C64Serial.print(message);
+        }
     }
-#endif
+//#endif
 }
 
 // Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
@@ -860,7 +892,7 @@ void C64Println()
     C64Serial.println();
 }
 
-#ifndef HAYES
+//#ifndef HAYES
 void ShowPETSCIIMode()
 {
     C64Println();
@@ -899,7 +931,7 @@ void SetPETSCIIMode(boolean mode)
     petscii_mode = mode;
     updateEEPROMByte(ADDR_PETSCII, petscii_mode);
 }
-#endif  // HAYES
+//#endif  // HAYES
 
 
 // ----------------------------------------------------------
@@ -917,7 +949,7 @@ boolean IsBackSpace(char c)
     }
 }
 
-#ifndef HAYES
+//#ifndef HAYES
 String GetInput()
 {
     String temp = GetInput_Raw();
@@ -969,7 +1001,7 @@ String GetInput_Raw()
         if (i < 0) i = 0;
     }
 }
-#endif        // HAYES
+//#endif        // HAYES
 
 // ----------------------------------------------------------
 // Show Configuration
@@ -989,45 +1021,49 @@ void ShowInfo(boolean powerup)
     //wifly.getSSID(ssid, 20);
     //WiFlyLocalPort = wifly.getPort();   // Port WiFly listens on.  0 = disabled.
 
-#ifdef HAYES
-    //C64Println();
-    //C64Print(F("MAC Address: "));    C64Println(mac);
-    C64Print(F("IP Address:  "));    Serial.println(WiFi.localIP());
-    C64Print(F("IP Subnet:   "));    Serial.println(WiFi.subnetMask());
-    C64Print(F("IP Gateway:  "));    Serial.println(WiFi.gatewayIP());
-    //C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
-    //C64Print(F("Firmware:    "));    C64Println(VERSION);
-    //C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
+//#ifdef HAYES
+    if (mode_Hayes) {
+        //C64Println();
+        //C64Print(F("MAC Address: "));    C64Println(mac);
+        C64Print(F("IP Address:  "));    Serial.println(WiFi.localIP());
+        C64Print(F("IP Subnet:   "));    Serial.println(WiFi.subnetMask());
+        C64Print(F("IP Gateway:  "));    Serial.println(WiFi.gatewayIP());
+        //C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
+        //C64Print(F("Firmware:    "));    C64Println(VERSION);
+        //C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
 
-    if (!powerup) {
-        char at_settings[40];
-        //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"), Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses, Modem_DCDFollowsRemoteCarrier, Modem_flowControl, Modem_S0_AutoAnswer);
-        sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d\r\n S0=%d S2=%d S99=%d"),
-            Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses,
-            Modem_DCDFollowsRemoteCarrier, Modem_X_Result, Modem_flowControl,
-            Modem_dataSetReady, Modem_S0_AutoAnswer, (int)Modem_S2_EscapeCharacter,
-            Modem_suppressErrors);
-        C64Print(F("CURRENT INIT:"));    C64Println(at_settings);
-        //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
-        sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d\r\n S0=%d S2=%d S99=%d"),
-            EEPROM.read(ADDR_MODEM_ECHO), EEPROM.read(ADDR_MODEM_QUIET), EEPROM.read(ADDR_MODEM_VERBOSE),
-            EEPROM.read(ADDR_MODEM_DCD), EEPROM.read(ADDR_MODEM_X_RESULT), EEPROM.read(ADDR_MODEM_FLOW),
-            EEPROM.read(ADDR_MODEM_DSR), EEPROM.read(ADDR_MODEM_S0_AUTOANS), EEPROM.read(ADDR_MODEM_S2_ESCAPE),
-            EEPROM.read(ADDR_MODEM_SUP_ERRORS));
-        C64Print(F("SAVED INIT:  "));    C64Println(at_settings);
+        if (!powerup) {
+            char at_settings[40];
+            //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"), Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses, Modem_DCDFollowsRemoteCarrier, Modem_flowControl, Modem_S0_AutoAnswer);
+            sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d\r\n S0=%d S2=%d S99=%d"),
+                Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses,
+                Modem_DCDFollowsRemoteCarrier, Modem_X_Result, Modem_flowControl,
+                Modem_dataSetReady, Modem_S0_AutoAnswer, (int)Modem_S2_EscapeCharacter,
+                Modem_suppressErrors);
+            C64Print(F("CURRENT INIT:"));    C64Println(at_settings);
+            //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
+            sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d\r\n S0=%d S2=%d S99=%d"),
+                EEPROM.read(ADDR_MODEM_ECHO), EEPROM.read(ADDR_MODEM_QUIET), EEPROM.read(ADDR_MODEM_VERBOSE),
+                EEPROM.read(ADDR_MODEM_DCD), EEPROM.read(ADDR_MODEM_X_RESULT), EEPROM.read(ADDR_MODEM_FLOW),
+                EEPROM.read(ADDR_MODEM_DSR), EEPROM.read(ADDR_MODEM_S0_AUTOANS), EEPROM.read(ADDR_MODEM_S2_ESCAPE),
+                EEPROM.read(ADDR_MODEM_SUP_ERRORS));
+            C64Print(F("SAVED INIT:  "));    C64Println(at_settings);
+        }
     }
-#else
-                                        //C64Println();
-    //C64Print(F("MAC Address: "));    C64Println(mac);
-    C64Print(F("IP Address:  "));    Serial.println(WiFi.localIP()); 
-    C64Print(F("IP Subnet:   "));    Serial.println(WiFi.subnetMask());
-    C64Print(F("IP Gateway:  "));    Serial.println(WiFi.gatewayIP());
-    //C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
-    //C64Print(F("Firmware:    "));    C64Println(VERSION);
-    //C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
-#endif
+    else {
+        //#else
+                                                //C64Println();
+            //C64Print(F("MAC Address: "));    C64Println(mac);
+        C64Print(F("IP Address:  "));    Serial.println(WiFi.localIP());
+        C64Print(F("IP Subnet:   "));    Serial.println(WiFi.subnetMask());
+        C64Print(F("IP Gateway:  "));    Serial.println(WiFi.gatewayIP());
+        //C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
+        //C64Print(F("Firmware:    "));    C64Println(VERSION);
+        //C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
+    }
+//#endif
 
-#ifndef HAYES
+//#ifndef HAYES
 #ifdef MICROVIEW    
     if (powerup)
     {
@@ -1050,10 +1086,10 @@ void ShowInfo(boolean powerup)
         delay(1000);
     }
 #endif  // MICROVIEW    
-#endif  // HAYES
+//#endif  // HAYES
 }
 
-#ifndef HAYES
+//#ifndef HAYES
 // ----------------------------------------------------------
 // Simple Incoming connection handling
 
@@ -1158,7 +1194,7 @@ int getPort(void)
         return(lastPort);
     }
 }
-#endif // HAYES
+//#endif // HAYES
 
 void Connect(String host, int port, boolean raw)
 {
@@ -1170,7 +1206,7 @@ void Connect(String host, int port, boolean raw)
         host = F("q-link.net");
         port = 5190;
     }
-#ifdef HAYES
+//#ifdef HAYES
     else if (host == F("CS38")) {
         host = F("www.commodoreserver.com");
         port = 1541;
@@ -1190,16 +1226,17 @@ void Connect(String host, int port, boolean raw)
         Modem_flowControl = true;
         delay(1000);
     }
-#endif    // HAYES
+//#endif    // HAYES
 
     char temp[50];
     //sprintf_P(temp, PSTR("\r\nConnecting to %s"), host.c_str());
     snprintf_P(temp, (size_t)sizeof(temp), PSTR("\r\nConnecting to %s"), host.c_str());
-#ifdef HAYES
-    DisplayP(temp);
-#else
+//#ifdef HAYES
+    if (mode_Hayes)
+        DisplayP(temp);
+//#else
     DisplayBothP(temp);
-#endif
+//#endif
 
     // Do a DNS lookup to get the IP address. 4 Lookup has a 5 second timeout.
     /*char ip[16];
@@ -1234,43 +1271,52 @@ void Connect(String host, int port, boolean raw)
     {
         //sprintf_P(temp, PSTR("Connected to %s"), host.c_str());
         snprintf_P(temp, (size_t)sizeof(temp), PSTR("Connected to %s"), host.c_str());
-#ifdef HAYES
-        DisplayP(temp);
-#else
-        DisplayBothP(temp);
-#endif
+//#ifdef HAYES
+        if (mode_Hayes)
+            DisplayP(temp);
+        else
+//#else
+            DisplayBothP(temp);
+//#endif
         //        if (Modem_DCDFollowsRemoteCarrier)
         //            digitalWrite(C64_DCD, Modem_ToggleCarrier(true));
     }
     else
     {
-#ifdef HAYES
-        Display(F("Connect Failed!"));
-        delay(1000);
-        if (Modem_X_Result >= 3)
-            Modem_PrintResponse(7, ("BUSY"));
-        else
-            //Modem_Disconnect(true);
-            Modem_PrintResponse(3, ("NO CARRIER"));
-#else
-        DisplayBoth(F("Connect Failed!"));
-#endif
+//#ifdef HAYES
+        if (mode_Hayes) {
+            Display(F("Connect Failed!"));
+            delay(1000);
+            if (Modem_X_Result >= 3)
+                Modem_PrintResponse(7, ("BUSY"));
+            else
+                //Modem_Disconnect(true);
+                Modem_PrintResponse(3, ("NO CARRIER"));
+        }
+        else {
+//#else
+            DisplayBoth(F("Connect Failed!"));
+//#endif
+        }
         //        if (Modem_DCDFollowsRemoteCarrier)
         //            digitalWrite(C64_DCD, Modem_ToggleCarrier(false));
         return;
     }
 
-#ifdef HAYES
-    Modem_Connected(false);
-#else
-    if (Modem_DCDFollowsRemoteCarrier)
-        digitalWrite(C64_DCD, Modem_ToggleCarrier(true));
-    TerminalMode();
-#endif
+//#ifdef HAYES
+    if (mode_Hayes)
+        Modem_Connected(false);
+//#else
+    else {
+        if (Modem_DCDFollowsRemoteCarrier)
+            digitalWrite(C64_DCD, Modem_ToggleCarrier(true));
+        TerminalMode();
+    }
+//#endif
 }
 
 
-#ifndef HAYES
+//#ifndef HAYES
 void TerminalMode()
 {
     int data;
@@ -1360,16 +1406,16 @@ void TerminalMode()
     }
     wifly.stop();
 
-#ifdef HAYES          
-    Modem_Disconnect(true);
-#else
+//#ifdef HAYES          
+    //Modem_Disconnect(true);
+//#else
     DisplayBoth(F("Connection closed"));
-#endif
+//#endif
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWrite(C64_DCD, Modem_ToggleCarrier(false));
 }
 
-#endif  // HAYES
+//#endif  // HAYES
 
 // Raw Terminal Mode.  There is no escape.
 /*void RawTerminalMode()
@@ -1565,7 +1611,7 @@ int PeekByte(Stream& in, unsigned int timeout)
     return in.peek();
 }
 
-#ifndef HAYES
+//#ifndef HAYES
 void HandleAutoStart()
 {
     // Display chosen action
@@ -1594,9 +1640,9 @@ void HandleAutoStart()
         Modem_Dialout(address);
     }
 }
-#endif  // HAYES
+//#endif  // HAYES
 
-#ifdef HAYES
+//#ifdef HAYES
 // ----------------------------------------------------------
 // Hayes Emulation
 // Portions of this code are adapted from Payton Byrd's Hayesduino - thanks!
@@ -3096,7 +3142,7 @@ void Modem_Loop()
     //digitalWrite(DCE_RTS, HIGH);
 }
 
-#endif // HAYES
+//#endif // HAYES
 
 /*
 void setBaudWiFi(unsigned int newBaudRate) {
@@ -3328,9 +3374,10 @@ void Modem_Dialout(char* host)
 
     if (strlen(host) == 0)
     {
-#ifdef HAYES
-        Modem_PrintERROR();
-#endif
+//#ifdef HAYES
+        if (mode_Hayes)
+            Modem_PrintERROR();
+//#endif
         return;
     }
 
