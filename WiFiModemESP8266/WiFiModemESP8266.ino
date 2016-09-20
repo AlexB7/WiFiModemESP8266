@@ -32,7 +32,11 @@ Feb 24th, 2016: Alex Burger
 /* TODO /issues
 -Can't connect to hosts on local network, but can connect via default gateway.
 -at&f&c1 causes DCD to go high when &f is processed, then low again when &c1 is processed.
-
+-incoming
+-baud rate change
+-After switching between hayes/menu, WiFi may not reconnect.
+-After setting the passphrase and then SSID (*p, *s), WiFi may not connect.  Power off/on works.
+-Hayes/menu interferring with each other's settings?
 
 */
 
@@ -212,6 +216,7 @@ char    Modem_S2_EscapeCharacter = '+';
 boolean Modem_isConnected = false;
 
 // Misc Values
+String SSID_passphrase;
 #define TIMEDOUT  -1
 //boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
 boolean baudMismatch = false;
@@ -348,28 +353,37 @@ void loop()
 
     //C64Serial.setTimeout(1000);
 
-    //
+    C64Serial.println();
+    if (mode_Hayes)
+        DisplayBoth(F("WI-FI INIT..."));
+    else
+        DisplayBoth(F("Wi-Fi Init..."));
+
     C64Serial.println();
     C64Serial.println();
     C64Serial.print("Connecting to ");
-    C64Serial.println(ssid);
+    C64Serial.println(WiFi.SSID());
 
-    WiFi.begin(ssid, password);
+    //WiFi.begin(ssid, password);
+    WiFi.begin();
 
-    while (WiFi.status() != WL_CONNECTED) {
+    int WiFicounter = 0;
+    boolean WiFiConnectSuccess = false;
+
+    while (WiFicounter < 40) {
         delay(500);
         Serial.print(".");
+        if (WiFi.status() == WL_CONNECTED) {
+            WiFiConnectSuccess = true;
+            break;
+        }
+        WiFicounter++;
     }
-
-    C64Serial.println("");
-    C64Serial.println("WiFi connected");
-    C64Serial.println("IP address: ");
-    C64Serial.println(WiFi.localIP());
 
     //WiFiClient WifiSerial;
 
     // Menu or Hayes AT command mode
-    //mode_Hayes = EEPROM.read(ADDR_HAYES_MENU);
+    mode_Hayes = EEPROM.read(ADDR_HAYES_MENU);
     if (mode_Hayes < 0 || mode_Hayes > 1)
         mode_Hayes = 0;
 
@@ -380,31 +394,8 @@ void loop()
     //WifiSerial.begin(WiFly_BAUD_RATE);
 
     C64Serial.println();
-//#ifdef HAYES
-//    DisplayBoth(F("WI-FI INIT..."));
-//#else
-//    DisplayBoth(F("Wi-Fi Init..."));
-//#endif
-
-    if(mode_Hayes)
-        DisplayBoth(F("WI-FI INIT..."));
-    else
-        DisplayBoth(F("Wi-Fi Init..."));
-
-#ifdef DEBUG
-    //boolean ok = wifly.begin(&WifiSerial, &C64Serial);
-#else
-    //boolean ok = wifly.begin(&WifiSerial);
-#endif
-
-    //
-    if (true)
+    if (WiFiConnectSuccess)
     {
-//#ifdef HAYES
-//        DisplayBoth(F("WI-FI OK!"));
-//#else
-//        DisplayBoth(F("Wi-Fi OK!"));
-//#endif
         if(mode_Hayes)
             DisplayBoth(F("WI-FI OK!"));
         else
@@ -412,17 +403,16 @@ void loop()
     }
     else
     {
-//#ifdef HAYES
-//        DisplayBoth(F("WI-FI FAILED!"));
-//#else
-//        DisplayBoth(F("Wi-Fi Failed!"));
-//#endif
         if (mode_Hayes)
             DisplayBoth(F("WI-FI FAILED!"));
         else
             DisplayBoth(F("Wi-Fi Failed!"));
         //RawTerminalMode();
     }
+
+    C64Serial.println("");
+    C64Serial.println("WiFi connected");
+    C64Serial.println("IP address: ");
 
     /*configureWiFly();
 
@@ -479,6 +469,7 @@ void loop()
                 "2. Phone Book\r\n"
                 "3. Wait for incoming connection\r\n"
                 "4. Configuration\r\n"
+                "5. Hayes Emulation Mode\r\n"
                 "\r\n"
                 "Select: "));
 
@@ -501,6 +492,16 @@ void loop()
 
             case '4':
                 Configuration();
+                break;
+
+            case '5':
+                mode_Hayes = true;
+                updateEEPROMByte(ADDR_HAYES_MENU, mode_Hayes);
+                C64Println(F("Restarting in Hayes Emulation mode."));
+                C64Println(F("Use AT&M to return to menu mode."));
+                C64Println();
+                ESP.restart();
+                while (1);
                 break;
 
             case '\n':
@@ -1028,8 +1029,11 @@ void ShowInfo(boolean powerup)
         C64Print(F("IP Address:  "));    Serial.println(WiFi.localIP());
         C64Print(F("IP Subnet:   "));    Serial.println(WiFi.subnetMask());
         C64Print(F("IP Gateway:  "));    Serial.println(WiFi.gatewayIP());
-        //C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
-        //C64Print(F("Firmware:    "));    C64Println(VERSION);
+        C64Print(F("Wi-Fi SSID:  "));    Serial.println(WiFi.SSID());
+        C64Print(F("MAC Address: "));    Serial.println(WiFi.macAddress());
+        C64Print(F("DNS IP:      "));    Serial.println(WiFi.dnsIP());
+        C64Print(F("Hostanme:    "));    Serial.println(WiFi.hostname());
+        C64Print(F("Firmware:    "));    C64Println(VERSION);
         //C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
 
         if (!powerup) {
@@ -1057,8 +1061,11 @@ void ShowInfo(boolean powerup)
         C64Print(F("IP Address:  "));    Serial.println(WiFi.localIP());
         C64Print(F("IP Subnet:   "));    Serial.println(WiFi.subnetMask());
         C64Print(F("IP Gateway:  "));    Serial.println(WiFi.gatewayIP());
-        //C64Print(F("Wi-Fi SSID:  "));    C64Println(ssid);
-        //C64Print(F("Firmware:    "));    C64Println(VERSION);
+        C64Print(F("Wi-Fi SSID:  "));    Serial.println(WiFi.SSID());
+        C64Print(F("MAC Address: "));    Serial.println(WiFi.macAddress());
+        C64Print(F("DNS IP:      "));    Serial.println(WiFi.dnsIP());
+        C64Print(F("Hostanme:    "));    Serial.println(WiFi.hostname());
+        C64Print(F("Firmware:    "));    C64Println(VERSION);
         //C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
     }
 //#endif
@@ -2015,6 +2022,9 @@ void Modem_ProcessCommandBuffer()
     {
         for (int i = 2; i < strlen(Modem_CommandBuffer) && i < COMMAND_BUFFER_SIZE - 3;)
         {
+            int counter = 0;
+            int WiFiConnectSuccess = false;
+
             switch (Modem_CommandBuffer[i++])
             {
             case 'Z':   // ATZ
@@ -2287,6 +2297,15 @@ void Modem_ProcessCommandBuffer()
                 //    RawTerminalMode();
                 //    break;
 
+                case 'M':   // AT&M
+                    mode_Hayes = false;
+                    updateEEPROMByte(ADDR_HAYES_MENU, mode_Hayes);
+                    C64Println(F("Restarting in Menu mode."));
+                    C64Println();
+                    ESP.restart();
+                    while (1);
+                    break;
+
                 case 'S':   // AT&S
                     switch (Modem_CommandBuffer[i++])
                     {
@@ -2355,16 +2374,31 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
-                /*case 'S':   // AT*S
+                case 'S':   // AT*S     Set SSID
                     switch (Modem_CommandBuffer[i++])
                     {
                     case '=':
-                        wifly.setSSID(Modem_LastCommandBuffer + i);
+                        WiFi.begin(Modem_LastCommandBuffer + i, SSID_passphrase.c_str());
 
-                        wifly.leave();
-                        if (!wifly.join(20000))    // 20 second timeout
+                        while (counter < 40) {
+                            delay(500);
+                            Serial.print(".");
+                            if (WiFi.status() == WL_CONNECTED) {
+                                WiFiConnectSuccess = true;
+                                break;
+                            }
+                            counter++;
+                        }
+                        if (WiFiConnectSuccess == false)
                             errors++;
 
+                        //wifly.setSSID(Modem_LastCommandBuffer + i);
+
+                        /*wifly.leave();
+                        if (!wifly.join(20000))    // 20 second timeout
+                            errors++;
+                            */
+
                         i = strlen(Modem_LastCommandBuffer);    // Consume the rest of the line.
                         break;
 
@@ -2372,12 +2406,13 @@ void Modem_ProcessCommandBuffer()
                         errors++;
                     }
                     break;
-
-                case 'P':   // AT*P
+                    
+                case 'P':   // AT*P     Set SSID passphrase
                     switch (Modem_CommandBuffer[i++])
                     {
                     case '=':
-                        wifly.setPassphrase(Modem_LastCommandBuffer + i);
+                        SSID_passphrase = (String)(Modem_LastCommandBuffer + i);
+                        //wifly.setPassphrase(Modem_LastCommandBuffer + i);
 
                         i = strlen(Modem_LastCommandBuffer);    // Consume the rest of the line.
                         break;
@@ -2386,8 +2421,8 @@ void Modem_ProcessCommandBuffer()
                         errors++;
                     }
                     break;
-
-                case 'K':   // AT*K
+                    /*
+                case 'K':   // AT*K     Set SSID key for WEP
                     switch (Modem_CommandBuffer[i++])
                     {
                     case '=':
