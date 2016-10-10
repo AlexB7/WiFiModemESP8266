@@ -49,6 +49,12 @@ Feb 24th, 2016: Alex Burger
 // Free memory at AT command prompt should be around 300.  At 200, ATI output is garbled.
 #define HAYES     // Also define in WiFlyHQ.cpp!
 
+
+// For system_get_free_heap_size()
+//extern "C" {
+//#include "user_interface.h"
+//}
+
 #ifdef MICROVIEW
 //#include <MicroView.h>
 #endif
@@ -62,7 +68,7 @@ Feb 24th, 2016: Alex Burger
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "ESP 0.12"
+#define VERSION "Wi-Fi Modem ESP 0.12"
 // Based on 0.12b5 with modem_loop fix.  
 
 unsigned int BAUD_RATE = 2400;
@@ -109,7 +115,7 @@ WiFiClient wifly;
 
 // TODO - remove for esp8266
 #define WIFLY_MODE_WEP 0
-#define WIFLY_MODE_WPA 0
+#define WIFLY_MODE_WPA 1
 
 
 //SoftwareSerial C64Serial(C64_RxD, C64_TxD);
@@ -218,8 +224,6 @@ boolean Modem_isConnected = false;
 // Misc Values
 String SSID_passphrase;
 #define TIMEDOUT  -1
-//boolean baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
-boolean baudMismatch = false;
 boolean Modem_flowControl = false;   // for &K setting.
 boolean Modem_isDcdInverted = true;
 boolean Modem_DCDFollowsRemoteCarrier = false;    // &C
@@ -258,9 +262,9 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 // Arduino Setup Function
 
 void setup() {
-    
+   
     EEPROM.begin(1024);
-
+    //ESP.wdtDisable();
 }
 
 
@@ -369,7 +373,6 @@ void loop()
 
     int WiFicounter = 0;
     boolean WiFiConnectSuccess = false;
-
     while (WiFicounter < 40) {
         delay(500);
         Serial.print(".");
@@ -386,10 +389,6 @@ void loop()
     mode_Hayes = EEPROM.read(ADDR_HAYES_MENU);
     if (mode_Hayes < 0 || mode_Hayes > 1)
         mode_Hayes = 0;
-
-
-    //baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
-    baudMismatch = false;
 
     //WifiSerial.begin(WiFly_BAUD_RATE);
 
@@ -423,8 +422,6 @@ void loop()
         else
             setBaudWiFi(BAUD_RATE);
     }*/
-    //baudMismatch = (BAUD_RATE != WiFly_BAUD_RATE ? 1 : 0);
-    baudMismatch = false;
 
     //wifly.stop();
 
@@ -557,8 +554,8 @@ void Configuration()
                                 // showInfo().  May only be at high speeds such as 38400.  Trying this..
             break;
 
-        //case '2': ChangeSSID();
-        //    break;
+        case '2': ChangeSSID();
+            break;
 
         case '3':
             Modem_flowControl = !Modem_flowControl;
@@ -602,7 +599,7 @@ void Configuration()
     }
 }
 
-/*void ChangeSSID()
+void ChangeSSID()
 {
     int mode = -1;
 
@@ -654,14 +651,12 @@ void Configuration()
         {
         case WIFLY_MODE_WEP:
             C64Print(F("Key:"));
-            input = GetInput();
-            wifly.setKey(input.c_str());
+            SSID_passphrase = GetInput();
             break;
 
         case WIFLY_MODE_WPA:
             C64Print(F("Passphrase:"));
-            input = GetInput();
-            wifly.setPassphrase(input.c_str());
+            SSID_passphrase = GetInput();
             break;
 
         default:  // Should never happen
@@ -671,23 +666,35 @@ void Configuration()
         C64Println();
         C64Print(F("SSID:"));
         input = GetInput();
-        wifly.setSSID(input.c_str());   // Note return value appears to be inverted, not sure why
-        wifly.save();
-        wifly.leave();
 
-        if (wifly.join(20000))    // 20 second timeout
-        {
-            C64Println(F("\r\nSSID Successfully changed"));
-            return;
+        C64Println(F("\r\nConnecting to network...\r\n"));
+
+        WiFi.begin(input.c_str(), SSID_passphrase.c_str());
+
+        int WiFicounter = 0;
+        boolean WiFiConnectSuccess = false;
+        while (WiFicounter < 40) {
+            delay(500);
+            Serial.print(".");
+            if (WiFi.status() == WL_CONNECTED) {
+                WiFiConnectSuccess = true;
+                break;
+            }
+            WiFicounter++;
         }
-        else
+        if (WiFiConnectSuccess == false)
         {
             C64Println(F("\r\nError joining network"));
             continue;
         }
+        else
+        {
+            C64Println(F("\r\nSSID Successfully changed"));
+            return;
+        }
     }
 }
-*/
+
 
 void PhoneBook()
 {
@@ -1332,13 +1339,21 @@ void TerminalMode()
     int buffer_bytes = 0;
     isFirstChar = true;
     //int max_buffer_size_reached = 0;
+    //int heap;
+    //char temp[50];
 
     //while (wifly.available() != -1) // -1 means closed
     while (wifly.connected()) // -1 means closed
     {
+        //heap = system_get_free_heap_size();
+        
+        //sprintf_P(temp, "Heap:%d\r\n", heap);       
+        //C64Serial.write(temp);
+        
         while (wifly.available() > 0)
         {
             int data = wifly.read();
+            yield();
 
             // If first character back from remote side is NVT_IAC, we have a telnet connection.
             if (isFirstChar) {
@@ -1357,46 +1372,19 @@ void TerminalMode()
             {
                 if (data == NVT_IAC && isTelnet)
                 {
-                    if (baudMismatch)
-                    {
-                        //esp digitalWrite(WIFI_CTS, LOW);        // re-enable data
-                        if (CheckTelnetInline())
-                            buffer[buffer_index++] = NVT_IAC;
-                        //esp digitalWrite(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                    }
-                    else
                     {
                         if (CheckTelnetInline())
                             C64Serial.write(NVT_IAC);
                     }
-
                 }
                 else
                 {
-                    if (baudMismatch)
-                    {
-                        //esp digitalWrite(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                        buffer[buffer_index++] = data;
-                    }
-                    else
                     {
                         DoFlowControlModemToC64();
                         C64Serial.write(data);
                     }
                 }
             }
-        }
-        if (baudMismatch)
-        {
-            // Dump the buffer to the C64 before clearing WIFI_CTS
-            if (buffer_index > 8)
-                buffer_index = 8;
-            for (int i = 0; i < buffer_index; i++) {
-                C64Serial.write(buffer[i]);
-            }
-            buffer_index = 0;
-
-            //esp digitalWrite(WIFI_CTS, LOW);
         }
 
         while (C64Serial.available() > 0)
@@ -1420,6 +1408,7 @@ void TerminalMode()
 //#endif
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWrite(C64_DCD, Modem_ToggleCarrier(false));
+    //ESP.wdtEnable();
 }
 
 //#endif  // HAYES
@@ -1456,7 +1445,7 @@ void TerminalMode()
 
         if (changed)
         {
-            if (Modem_flowControl || baudMismatch)
+            if (Modem_flowControl)
             {
                 sprintf_P(temp, PSTR("Wifi:%ld\n\nC64: %ld\n\nRTS: %ld"), rnxv_chars, c64_chars, c64_rts_count);
             }
@@ -1510,6 +1499,8 @@ inline void DoFlowControlC64ToModem()
 boolean CheckTelnetInline()
 {
     int inpint, verbint, optint;                        //    telnet parameters as integers
+
+    yield();
 
                                                         // First time through
     if (isFirstChar)
@@ -2022,7 +2013,7 @@ void Modem_ProcessCommandBuffer()
     {
         for (int i = 2; i < strlen(Modem_CommandBuffer) && i < COMMAND_BUFFER_SIZE - 3;)
         {
-            int counter = 0;
+            int WiFicounter = 0;
             int WiFiConnectSuccess = false;
 
             switch (Modem_CommandBuffer[i++])
@@ -2380,14 +2371,16 @@ void Modem_ProcessCommandBuffer()
                     case '=':
                         WiFi.begin(Modem_LastCommandBuffer + i, SSID_passphrase.c_str());
 
-                        while (counter < 40) {
+                        WiFicounter = 0;
+                        WiFiConnectSuccess = false;
+                        while (WiFicounter < 40) {
                             delay(500);
                             Serial.print(".");
                             if (WiFi.status() == WL_CONNECTED) {
                                 WiFiConnectSuccess = true;
                                 break;
                             }
-                            counter++;
+                            WiFicounter++;
                         }
                         if (WiFiConnectSuccess == false)
                             errors++;
@@ -2905,14 +2898,6 @@ void Modem_Loop()
                             {
                                 if (data == NVT_IAC && isTelnet)
                                 {
-                                    if (baudMismatch)
-                                    {
-                                        digitalWrite(WIFI_CTS, LOW);        // re-enable data
-                                        if (CheckTelnetInline())
-                                            buffer[buffer_index++] = NVT_IAC;
-                                        digitalWrite(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                                    }
-                                    else
                                     {
                                         if (CheckTelnetInline())
                                             C64Serial.write(NVT_IAC);
@@ -2921,12 +2906,6 @@ void Modem_Loop()
                                 }
                                 else
                                 {
-                                    if (baudMismatch)
-                                    {
-                                        digitalWrite(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi
-                                        buffer[buffer_index++] = data;
-                                    }
-                                    else
                                     {
                                         DoFlowControlModemToC64();
                                         C64Serial.write(data);
@@ -2935,18 +2914,6 @@ void Modem_Loop()
                                     }
                                 }
                             }
-                        }
-                        if (baudMismatch)
-                        {
-                            // Dump the buffer to the C64 before clearing WIFI_CTS
-                            if (buffer_index > 8)
-                                buffer_index = 8;
-                            for (int i = 0; i < buffer_index; i++) {
-                                C64Serial.write(buffer[i]);
-                            }
-                            buffer_index = 0;
-
-                            digitalWrite(WIFI_CTS, LOW);
                         }
                     }
                 }
@@ -3287,6 +3254,8 @@ String readEEPROMPhoneBook(int address)
 void processC64Inbound()
 {
     char C64input = C64Serial.read();
+
+    yield();
 
     if ((millis() - ESCAPE_GUARD_TIME) > escapeTimer)
     {
