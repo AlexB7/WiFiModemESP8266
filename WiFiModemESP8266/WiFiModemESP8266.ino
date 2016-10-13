@@ -72,7 +72,6 @@ Feb 24th, 2016: Alex Burger
 // Based on 0.12b5 with modem_loop fix.  
 
 unsigned int BAUD_RATE = 2400;
-unsigned int WiFly_BAUD_RATE = 2400;
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -95,6 +94,7 @@ unsigned int WiFly_BAUD_RATE = 2400;
 #define C64_RxD  3      // Connected to C64 TX pin
 */
 
+/*
 // ESP8266-12
 #define C64_RTS  14
 #define C64_CTS  12
@@ -104,7 +104,17 @@ unsigned int WiFly_BAUD_RATE = 2400;
 #define C64_DSR  5
 #define C64_TxD  1
 #define C64_RxD  3
+*/
 
+// ESP8266-12 WM
+#define C64_RTS  13     // D
+#define C64_CTS  14     // K
+#define C64_DCD  16     // H
+#undef C64_DTR
+#undef C64_RI    // not available
+#undef C64_DSR  
+#define C64_TxD  1      // M
+#define C64_RxD  3      // B,C
 
 //SoftwareSerial C64Serial(C64_RxD, C64_TxD);
 //HardwareSerial& WifiSerial = Serial;
@@ -301,9 +311,11 @@ void loop()
     }
 
     Modem_dataSetReady = EEPROM.read(ADDR_MODEM_DSR);
+#ifdef C64_DSR
     if (Modem_dataSetReady == 2)
         pinMode(C64_DSR, INPUT);    // Set as input to make sure it doesn't interfere with UP9600.
                                         // Some computers have issues with 100 ohm resistor pack
+#endif
 
     //BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
 
@@ -327,7 +339,7 @@ void loop()
                                                //char temp[20];
                                                //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
                                                //Display(temp);
-    long detectedBaudRate = 2400;
+    long detectedBaudRate = BAUD_RATE;
     if (detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 || 
         detectedBaudRate == 9600 || detectedBaudRate == 19200 || detectedBaudRate == 38400 || 
         detectedBaudRate == 57600 || detectedBaudRate == 115200)
@@ -352,8 +364,6 @@ void loop()
 
     C64Serial.begin(BAUD_RATE);
     delay(10);
-
-    //WifiSerial.begin(WiFly_BAUD_RATE);
 
     //C64Serial.setTimeout(1000);
 
@@ -389,8 +399,6 @@ void loop()
     mode_Hayes = EEPROM.read(ADDR_HAYES_MENU);
     if (mode_Hayes < 0 || mode_Hayes > 1)
         mode_Hayes = 0;
-
-    //WifiSerial.begin(WiFly_BAUD_RATE);
 
     C64Serial.println();
     if (WiFiConnectSuccess)
@@ -1647,12 +1655,18 @@ void HandleAutoStart()
 
 void HayesEmulationMode()
 {
+#ifdef C64_DSR    
     Modem_DSR_Set();
+#endif
 
+#ifdef C64_RI
     pinMode(C64_RI, OUTPUT);
     digitalWrite(C64_RI, LOW);
+#endif
 
+#ifdef C64_DTR
     pinMode(C64_DTR, INPUT);
+#endif
     //pinMode(C64_DCD, OUTPUT);     // Moved to top of main()
     pinMode(C64_RTS, INPUT);
 
@@ -1822,7 +1836,9 @@ void Modem_LoadDefaults(boolean booting)
     if (!booting)
     {
         Modem_dataSetReady = 0;
+#ifdef C64_DSR
         Modem_DSR_Set();
+#endif
     }
 }
 
@@ -1842,7 +1858,9 @@ void Modem_LoadSavedSettings(void)
     Modem_dataSetReady = EEPROM.read(ADDR_MODEM_DSR);
 
     Modem_DCD_Set();
+#ifdef C64_DSR
     Modem_DSR_Set();
+#endif
 
 }
 
@@ -1890,8 +1908,10 @@ void Modem_Disconnect(boolean printNoCarrier)
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWrite(C64_DCD, Modem_ToggleCarrier(false));
 
+#ifdef C64_DSR
     if (Modem_dataSetReady == 1)
         digitalWrite(C64_DSR, HIGH);
+#endif
 }
 
 // Validate and handle AT sequence  (A/ was handled already)
@@ -2309,7 +2329,9 @@ void Modem_ProcessCommandBuffer()
                     case '2':
                         //Modem_dataSetReady = 2;
                         Modem_dataSetReady = Modem_CommandBuffer[i - 1] - '0x30';
+#ifdef C64_DSR
                         Modem_DSR_Set();
+#endif
                         break;
 
                     default:
@@ -2533,16 +2555,20 @@ void Modem_Ring()
     Modem_PrintResponse(2, ("\r\nRING"));
     if (Modem_S0_AutoAnswer != 0)
     {
+#ifdef C64_RI
         digitalWrite(C64_RI, HIGH);
         delay(250);
         digitalWrite(C64_RI, LOW);
+#endif
         Modem_Answer();
     }
     else
     {
+#ifdef C64_RI
         digitalWrite(C64_RI, HIGH);
         delay(250);
         digitalWrite(C64_RI, LOW);
+#endif
     }
 }
 
@@ -2581,9 +2607,10 @@ void Modem_Connected(boolean incoming)
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWrite(C64_DCD, Modem_ToggleCarrier(true));
 
+#ifdef C64_DSR    
     if (Modem_dataSetReady == 1)
         digitalWrite(C64_DSR, LOW);
-
+#endif
 
     //if (!commodoreServer38k)
     //    CheckTelnet();
@@ -2840,6 +2867,7 @@ void Modem_Loop()
     {
         while (wifly.available() > 0)
         {
+            yield();
             DoFlowControlModemToC64();
             C64Serial.write(wifly.read());
             delay(4);       // Slow things down a bit..
@@ -2879,6 +2907,7 @@ void Modem_Loop()
                     {
                         while (wifly.available() > 0)
                         {
+                            yield();
                             int data = wifly.read();
 
                             // If first character back from remote side is NVT_IAC, we have a telnet connection.
@@ -2941,6 +2970,7 @@ void Modem_Loop()
     //Modem_ProcessData();
     while (C64Serial.available() > 0)
     {
+        yield();
         if (commodoreServer38k)
         {
             DoFlowControlC64ToModem();
@@ -3083,6 +3113,7 @@ void Modem_Loop()
             {
                 if (Modem_isConnected)
                 {
+                    yield();
                     char C64input = C64Serial.read();
 
                     // +++ escape
@@ -3417,6 +3448,7 @@ void wake()
     //isSleeping = false;
 }*/
 
+#ifdef C64_DSR
 void Modem_DSR_Set()
 {
     if (Modem_dataSetReady != 2)
@@ -3446,7 +3478,7 @@ void Modem_DSR_Set()
 
     }
 }
-
+#endif
 
 
 // #EOF - Leave this at the very end...
