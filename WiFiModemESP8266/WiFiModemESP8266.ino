@@ -40,7 +40,7 @@ Feb 24th, 2016: Alex Burger
 
 */
 
-//#define MICROVIEW        // define to include MicroView display library and features
+#define MICROVIEW        // define to include MicroView display library and features
 
 //#define DEBUG
 
@@ -56,7 +56,10 @@ Feb 24th, 2016: Alex Burger
 //}
 
 #ifdef MICROVIEW
-//#include <MicroView.h>
+//#include <U8g2lib.h>
+#include <U8x8lib.h>
+#include <SPI.h>
+#include <Wire.h>
 #endif
 #include <elapsedMillis.h>
 #include <SoftwareSerial.h>
@@ -68,7 +71,7 @@ Feb 24th, 2016: Alex Burger
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "Wi-Fi Modem ESP 0.12"
+#define VERSION "ESP 0.12"
 // Based on 0.12b5 with modem_loop fix.  
 
 unsigned int BAUD_RATE = 2400;
@@ -115,6 +118,9 @@ unsigned int BAUD_RATE = 2400;
 #undef C64_DSR  
 #define C64_TxD  1      // M
 #define C64_RxD  3      // B,C
+#define I2C_SDA  4
+#define I2C_SCL  2
+#define I2C_ADDR 0x78
 
 //SoftwareSerial C64Serial(C64_RxD, C64_TxD);
 //HardwareSerial& WifiSerial = Serial;
@@ -263,10 +269,10 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 #define AUTO_QLINK    3
 #define AUTO_CUSTOM   100   // TODO
 
-// For now, define these in WiFiPass.h
-#include <WiFiPass.h>
-//const char* ssid = "xxxxx";
-//const char* password = "xxxx";
+#ifdef MICROVIEW
+//U8G2_SSD1306_128X64_NONAME_1_SW_I2C u8g2(U8G2_R0, I2C_SCL, I2C_SDA);
+U8X8_SSD1306_128X64_NONAME_SW_I2C u8x8(I2C_SCL, I2C_SDA, U8X8_PIN_NONE);
+#endif
 
 // ----------------------------------------------------------
 // Arduino Setup Function
@@ -274,19 +280,42 @@ boolean petscii_mode = EEPROM.read(ADDR_PETSCII);
 void setup() {
    
     EEPROM.begin(1024);
-    //ESP.wdtDisable();
+    //ESP.wdtDisable();   
 }
 
 
 void loop()
 {
     //init();
-#ifdef MICROVIEW    
-    uView.begin(); // begin of MicroView
-    uView.setFontType(0);
-    uView.clear(ALL); // erase hardware memory inside the OLED controller
-#else // MICROVIEW
-    //delay(3000);   // Five WiFly time to boot
+#ifdef MICROVIEW
+    Wire.begin(I2C_SDA, I2C_SCL);
+
+    /*
+    u8g2.begin();
+    u8g2.clearDisplay();
+    u8g2.firstPage();
+    do {
+        u8g2.setFont(u8g2_font_ncenB10_tr);
+        //u8g2.setFont(u8g2_font_ncenB12_tr);
+        //u8g2.setFont(u8g2_font_ncenB14_tr);
+        //u8g2.setFont(u8g2_font_baby_tr);
+        u8g2.drawStr(0, 24, "Wi-Fi Modem");
+    } while (u8g2.nextPage() );
+    */
+
+    u8x8.begin();
+    u8x8.setPowerSave(0);
+
+    u8x8.setFont(u8x8_font_chroma48medium8_r);
+    u8x8.clear();
+    u8x8.inverse();
+    u8x8.drawString(0, 1, "Wi-Fi Modem");
+    u8x8.noInverse();
+    u8x8.drawString(0, 3, "Firmware by");
+    u8x8.drawString(0, 4, "Alex Burger &");
+    u8x8.drawString(0, 5, "Leif Bloomquist");
+    delay(2000);
+
 #endif // MICROVIEW
 
     // Always setup pins for flow control
@@ -329,8 +358,8 @@ void loop()
     pinMode(C64_RxD, INPUT);
     //digitalWrite(C64_RxD, HIGH);
 
-    Display(F("Baud\nDetection"));
-
+    Display(("Baud Detection"), true, 1);
+    
     //long detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
                                                // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
                                                // by having sending circuit send "U" characters.
@@ -346,7 +375,7 @@ void loop()
     {
         char temp[6];
         sprintf_P(temp, PSTR("%ld"), detectedBaudRate);
-        Display(temp);
+        Display(temp, false, 2);
         delay(3000);
 
         BAUD_RATE = detectedBaudRate;
@@ -369,9 +398,9 @@ void loop()
 
     C64Serial.println();
     if (mode_Hayes)
-        DisplayBoth(F("WI-FI INIT..."));
+        DisplayBoth(("WI-FI INIT..."), true, 1);
     else
-        DisplayBoth(F("Wi-Fi Init..."));
+        DisplayBoth(("Wi-Fi Init..."), true, 1);
 
     C64Serial.println();
     C64Serial.println();
@@ -404,20 +433,20 @@ void loop()
     if (WiFiConnectSuccess)
     {
         if(mode_Hayes)
-            DisplayBoth(F("WI-FI OK!"));
+            DisplayBoth(("WI-FI OK!"), true, 1);
         else
-            DisplayBoth(F("Wi-Fi OK!"));
+            DisplayBoth(("Wi-Fi OK!"), true, 1);
     }
     else
     {
         if (mode_Hayes)
-            DisplayBoth(F("WI-FI FAILED!"));
+            DisplayBoth(("WI-FI FAILED!"), true, 1);
         else
-            DisplayBoth(F("Wi-Fi Failed!"));
+            DisplayBoth(("Wi-Fi Failed!"), true, 1);
         //RawTerminalMode();
     }
 
-    C64Serial.println("");
+    //C64Serial.println("");
     C64Serial.println("WiFi connected");
     C64Serial.println("IP address: ");
 
@@ -459,7 +488,7 @@ void loop()
 
         while (1)
         {
-            Display(F("READY."));
+            Display(("READY."), true, 1);
 
             // Clear phonebook.  TODO:  On ESP8266-07, 2) menu popped up and disappeared.  ASCII response to garbage?
             /*
@@ -810,41 +839,60 @@ void PhoneBook()
 // ----------------------------------------------------------
 // MicroView Display helpers
 
-void Display(String message)
+void Display(String message, boolean clear, int line)
 {
 #ifdef MICROVIEW
-    uView.clear(PAGE); // erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
-    uView.setCursor(0, 0);
-    uView.println(message);
-    uView.display();
+    /*
+    u8g2.clearDisplay();
+    u8g2.firstPage();
+    do {
+        u8g2.setFont(u8g2_font_baby_tr);
+        u8g2.print(message.c_str());
+        //u8g2.drawStr(0, 24, message.c_str());
+    } while (u8g2.nextPage());
+    */
+
+    u8x8.setFont(u8x8_font_chroma48medium8_r);
+    if (clear)
+        u8x8.clear();
+    u8x8.drawString(0, line, message.c_str());
 #endif
 }
 
 // Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
-void DisplayP(const char *message)
+void DisplayP(const char *message, boolean clear, int line)
 {
 #ifdef MICROVIEW
-    uView.clear(PAGE); // erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
-    uView.setCursor(0, 0);
-    uView.println(message);
-    uView.display();
+    /*
+    u8g2.clearDisplay();
+    u8g2.firstPage();
+    do {
+        u8g2.setFont(u8g2_font_baby_tr);
+        u8g2.print(message);
+        //u8g2.drawStr(0, 24, message);
+    } while (u8g2.nextPage());
+    */
+    u8x8.setFont(u8x8_font_chroma48medium8_r);
+    if (clear)
+        u8x8.clear();
+    u8x8.drawString(0, line, message);
 #endif
 }
 
-void DisplayBoth(String message)
+void DisplayBoth(String message, boolean clear, int line)
 {
     C64Println(message);
-    message.replace(' ', '\n');
-    Display(message);
+    //message.replace(' ', '\n');
+    Display(message, clear, line);
 }
 
 // Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
-void DisplayBothP(const char *message)
+void DisplayBothP(const char *message, boolean clear, int line)
 {
     String temp = message;
     C64PrintlnP(temp.c_str());
-    temp.replace(' ', '\n');
-    DisplayP(temp.c_str());
+    //temp.replace(' ', '\n');
+    DisplayP(temp.c_str(), clear, line);
 }
 
 
@@ -1054,14 +1102,14 @@ void ShowInfo(boolean powerup)
         if (!powerup) {
             char at_settings[40];
             //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"), Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses, Modem_DCDFollowsRemoteCarrier, Modem_flowControl, Modem_S0_AutoAnswer);
-            sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d\r\n S0=%d S2=%d S99=%d"),
+            sprintf_P(at_settings, PSTR("\r\n E%d Q%d V%d &C%d X%d &K%d &S%d\r\n S0=%d S2=%d S99=%d"),
                 Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses,
                 Modem_DCDFollowsRemoteCarrier, Modem_X_Result, Modem_flowControl,
                 Modem_dataSetReady, Modem_S0_AutoAnswer, (int)Modem_S2_EscapeCharacter,
                 Modem_suppressErrors);
             C64Print(F("CURRENT INIT:"));    C64Println(at_settings);
             //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
-            sprintf_P(at_settings, PSTR("\r\n E%dQ%dV%d&C%dX%d&K%d&S%d\r\n S0=%d S2=%d S99=%d"),
+            sprintf_P(at_settings, PSTR("\r\n E%d Q%d V%d &C%d X%d &K%d &S%d\r\n S0=%d S2=%d S99=%d"),
                 EEPROM.read(ADDR_MODEM_ECHO), EEPROM.read(ADDR_MODEM_QUIET), EEPROM.read(ADDR_MODEM_VERBOSE),
                 EEPROM.read(ADDR_MODEM_DCD), EEPROM.read(ADDR_MODEM_X_RESULT), EEPROM.read(ADDR_MODEM_FLOW),
                 EEPROM.read(ADDR_MODEM_DSR), EEPROM.read(ADDR_MODEM_S0_AUTOANS), EEPROM.read(ADDR_MODEM_S2_ESCAPE),
@@ -1091,21 +1139,22 @@ void ShowInfo(boolean powerup)
     {
         char temp[40];
 
-        sprintf_P(temp, PSTR("Firmware\n\n%s"), VERSION);
-        Display(temp);
+        Display("Firmware:", true, 1);
+        sprintf_P(temp, PSTR(" %s"), VERSION);
+        Display(temp, false , 2);
+
+        Display("Baud Rate:", false, 4);
+        sprintf_P(temp, PSTR(" %u"), BAUD_RATE);
+        Display(temp, false, 5);
+
+        /*sprintf(temp, ("IP Address: %s"), (WiFi.localIP());
+        Display(temp, false, 3);
         delay(1000);
 
-        sprintf_P(temp, PSTR("Baud Rate\n\n%u"), BAUD_RATE);
-        Display(temp);
-        delay(1000);
-
-        sprintf_P(temp, PSTR("IP Address \n%s"), ip);
-        Display(temp);
-        delay(1000);
-
-        sprintf_P(temp, PSTR("SSID\n\n%s"), ssid);
-        Display(temp);
-        delay(1000);
+        Display("SSID:", false, 4);
+        sprintf_P(temp, PSTR(" %s"), WiFi.SSID());
+        Display(temp, false, 5);*/
+        delay(3000);
     }
 #endif  // MICROVIEW    
 //#endif  // HAYES
@@ -1255,15 +1304,15 @@ void Connect(String host, int port, boolean raw)
     snprintf_P(temp, (size_t)sizeof(temp), PSTR("\r\nConnecting to %s"), host.c_str());
 //#ifdef HAYES
     if (mode_Hayes)
-        DisplayP(temp);
+        DisplayP(temp, true, 1);
 //#else
-    DisplayBothP(temp);
+    DisplayBothP(temp, true, 1);
 //#endif
 
     // Do a DNS lookup to get the IP address. 4 Lookup has a 5 second timeout.
     /*char ip[16];
     if (!wifly.getHostByName(host.c_str(), ip, sizeof(ip))) {
-        DisplayBoth(F("Could not resolve DNS.  Connect Failed!"));
+        DisplayBoth(("Could not resolve DNS.  Connect Failed!"));
         delay(1000);
 #ifdef HAYES
         if ((Modem_X_Result == 2) || (Modem_X_Result >= 4))  // >=2 but not 3 = Send NO DIALTONE           
@@ -1295,10 +1344,10 @@ void Connect(String host, int port, boolean raw)
         snprintf_P(temp, (size_t)sizeof(temp), PSTR("Connected to %s"), host.c_str());
 //#ifdef HAYES
         if (mode_Hayes)
-            DisplayP(temp);
+            DisplayP(temp, true, 1);
         else
 //#else
-            DisplayBothP(temp);
+            DisplayBothP(temp, true, 1);
 //#endif
         //        if (Modem_DCDFollowsRemoteCarrier)
         //            digitalWrite(C64_DCD, Modem_ToggleCarrier(true));
@@ -1307,7 +1356,7 @@ void Connect(String host, int port, boolean raw)
     {
 //#ifdef HAYES
         if (mode_Hayes) {
-            Display(F("Connect Failed!"));
+            Display(("Connect Failed!"), true, 1);
             delay(1000);
             if (Modem_X_Result >= 3)
                 Modem_PrintResponse(7, ("BUSY"));
@@ -1317,7 +1366,7 @@ void Connect(String host, int port, boolean raw)
         }
         else {
 //#else
-            DisplayBoth(F("Connect Failed!"));
+            DisplayBoth(("Connect Failed!"), true, 1);
 //#endif
         }
         //        if (Modem_DCDFollowsRemoteCarrier)
@@ -1412,7 +1461,7 @@ void TerminalMode()
 //#ifdef HAYES          
     //Modem_Disconnect(true);
 //#else
-    DisplayBoth(F("Connection closed"));
+    DisplayBoth(("Connection closed"), true, 1);
 //#endif
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWrite(C64_DCD, Modem_ToggleCarrier(false));
@@ -1701,7 +1750,7 @@ void HayesEmulationMode()
         if (option != TIMEDOUT)   // Key pressed
         {
             ReadByte(C64Serial);    // eat character
-            Display(F("OK"));
+            Display(("OK"), true, 1);
             C64Serial.print(F("OK"));
             C64Serial.println();
         }
@@ -1710,7 +1759,7 @@ void HayesEmulationMode()
     }
     else
     {
-        Display(("OK"));
+        Display(("OK"), true, 1);
         C64Serial.print(("OK"));
         C64Serial.println();
     }
@@ -1802,9 +1851,11 @@ void Modem_PrintResponse(byte code, String msg)
 
     // Always show verbose version on OLED, underneath command
 #ifdef MICROVIEW
-    uView.println();
+    /*uView.println();
     uView.println(msg);
-    uView.display();
+    uView.display();*/
+
+    Display(msg, false, 3);
 #endif
 }
 
@@ -1891,8 +1942,7 @@ void Modem_Disconnect(boolean printNoCarrier)
 
 #ifdef MICROVIEW
     // Erase MicroView screen as NO CARRIER may not fit after RING, CONNECT etc.
-    uView.clear(PAGE); // erase the memory buffer, when next uView.display() is called, the OLED will be cleared.
-    uView.setCursor(0, 0);
+    // u8g2.clearDisplay();
 #endif
 
     //if (wifly.available() == -1)
@@ -1944,7 +1994,7 @@ void Modem_ProcessCommandBuffer()
         Modem_CommandBuffer[i] = toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[i]));
     }
 
-    Display(Modem_CommandBuffer);
+    Display(Modem_CommandBuffer, true, 1);
 
     // Define auto-start phone book entry
     if (strncmp(Modem_CommandBuffer, ("AT&PBAUTO="), 10) == 0)
@@ -2817,7 +2867,7 @@ void Modem_ProcessData()
 
 
                         if (escapeCount == 3) {
-                            Display("Escape!");
+                            Display("Escape!", true, 1);
                             escapeReceived = true;
                             escapeCount = 0;
                             escapeTimer = 0;
@@ -2881,7 +2931,7 @@ void Modem_Loop()
             {
                 //wifly.println(F("CONNECTING..."));
 
-                Display(F("INCOMING\nCALL"));
+                Display(("INCOMING\nCALL"), true, 1);
                 Modem_Ring();
                 return;
             }
@@ -3144,7 +3194,7 @@ void Modem_Loop()
 
 
                         if (escapeCount == 3) {
-                            Display("Escape!");
+                            Display("Escape!", true, 1);
                             escapeReceived = true;
                             escapeCount = 0;
                             escapeTimer = 0;
@@ -3311,7 +3361,7 @@ void processC64Inbound()
         escapeTimer = millis();   // Last time data was read
 
     if (escapeCount == 3) {
-        Display(F("Escape!"));
+        Display(("Escape!"), true, 1);
         escapeReceived = true;
         escapeCount = 0;
         escapeTimer = 0;
