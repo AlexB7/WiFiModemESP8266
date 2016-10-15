@@ -346,9 +346,9 @@ void loop()
                                         // Some computers have issues with 100 ohm resistor pack
 #endif
 
-    //BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
+    BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
 
-    if (BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200 && 
+    if (BAUD_RATE != 300 && BAUD_RATE != 600 && BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200 &&
         BAUD_RATE != 38400 && BAUD_RATE != 57600 && BAUD_RATE != 115200)
         BAUD_RATE = 2400;
 
@@ -356,11 +356,11 @@ void loop()
     // Baud rate detection
     //
     pinMode(C64_RxD, INPUT);
-    //digitalWrite(C64_RxD, HIGH);
+    digitalWrite(C64_RxD, HIGH);
 
-    Display(("Baud Detection"), true, 1);
+    Display(("Baud Detection"), true, 0);
     
-    //long detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
+    long detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
                                                // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
                                                // by having sending circuit send "U" characters.
                                                // Returns 0 if none or under 1200 baud
@@ -368,14 +368,15 @@ void loop()
                                                //char temp[20];
                                                //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
                                                //Display(temp);
-    long detectedBaudRate = BAUD_RATE;
-    if (detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 || 
+    //long detectedBaudRate = BAUD_RATE;
+    if (detectedBaudRate == 300 || detectedBaudRate == 600 ||
+        detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 ||
         detectedBaudRate == 9600 || detectedBaudRate == 19200 || detectedBaudRate == 38400 || 
         detectedBaudRate == 57600 || detectedBaudRate == 115200)
     {
         char temp[6];
         sprintf_P(temp, PSTR("%ld"), detectedBaudRate);
-        Display(temp, false, 2);
+        Display(temp, false, 1);
         delay(3000);
 
         BAUD_RATE = detectedBaudRate;
@@ -398,9 +399,9 @@ void loop()
 
     C64Serial.println();
     if (mode_Hayes)
-        DisplayBoth(("WI-FI INIT..."), true, 1);
+        DisplayBoth(("WI-FI INIT..."), true, 0);
     else
-        DisplayBoth(("Wi-Fi Init..."), true, 1);
+        DisplayBoth(("Wi-Fi Init..."), true, 0);
 
     C64Serial.println();
     C64Serial.println();
@@ -433,22 +434,22 @@ void loop()
     if (WiFiConnectSuccess)
     {
         if(mode_Hayes)
-            DisplayBoth(("WI-FI OK!"), true, 1);
+            DisplayBoth(("WI-FI OK!"), true, 0);
         else
-            DisplayBoth(("Wi-Fi OK!"), true, 1);
+            DisplayBoth(("Wi-Fi OK!"), true, 0);
     }
     else
     {
         if (mode_Hayes)
-            DisplayBoth(("WI-FI FAILED!"), true, 1);
+            DisplayBoth(("WI-FI FAILED!"), true, 0);
         else
-            DisplayBoth(("Wi-Fi Failed!"), true, 1);
+            DisplayBoth(("Wi-Fi Failed!"), true, 0);
         //RawTerminalMode();
     }
 
     //C64Serial.println("");
-    C64Serial.println("WiFi connected");
-    C64Serial.println("IP address: ");
+    //C64Serial.println("WiFi connected");
+    //C64Serial.println("IP address: ");
 
     /*configureWiFly();
 
@@ -488,7 +489,7 @@ void loop()
 
         while (1)
         {
-            Display(("READY."), true, 1);
+            Display(("READY."), true, 0);
 
             // Clear phonebook.  TODO:  On ESP8266-07, 2) menu popped up and disappeared.  ASCII response to garbage?
             /*
@@ -839,43 +840,39 @@ void PhoneBook()
 // ----------------------------------------------------------
 // MicroView Display helpers
 
+
 void Display(String message, boolean clear, int line)
 {
 #ifdef MICROVIEW
-    /*
-    u8g2.clearDisplay();
-    u8g2.firstPage();
-    do {
-        u8g2.setFont(u8g2_font_baby_tr);
-        u8g2.print(message.c_str());
-        //u8g2.drawStr(0, 24, message.c_str());
-    } while (u8g2.nextPage());
-    */
+    u8x8.setFont(u8x8_font_chroma48medium8_r);
+    if (clear)
+        u8x8.clear();
+    if (line != -1)
+        u8x8.setCursor(0, line);
+    u8x8.print(message);
+#endif
+}
 
+/*void Display(String message, boolean clear, int line)
+{
+#ifdef MICROVIEW
     u8x8.setFont(u8x8_font_chroma48medium8_r);
     if (clear)
         u8x8.clear();
     u8x8.drawString(0, line, message.c_str());
 #endif
-}
+}*/
 
 // Pointer version.  Does not work with F("") or PSTR("").  Use with sprintf and sprintf_P
 void DisplayP(const char *message, boolean clear, int line)
 {
 #ifdef MICROVIEW
-    /*
-    u8g2.clearDisplay();
-    u8g2.firstPage();
-    do {
-        u8g2.setFont(u8g2_font_baby_tr);
-        u8g2.print(message);
-        //u8g2.drawStr(0, 24, message);
-    } while (u8g2.nextPage());
-    */
     u8x8.setFont(u8x8_font_chroma48medium8_r);
     if (clear)
         u8x8.clear();
-    u8x8.drawString(0, line, message);
+    if (line != -1)
+        u8x8.setCursor(0, line);
+    u8x8.print(message);
 #endif
 }
 
@@ -1087,17 +1084,26 @@ void ShowInfo(boolean powerup)
 
 //#ifdef HAYES
     if (mode_Hayes) {
+        yield();  // For 300 baud
         //C64Println();
         //C64Print(F("MAC Address: "));    C64Println(mac);
         C64Print(F("IP Address:  "));    Serial.println(WiFi.localIP());
+        yield();  // For 300 baud
         C64Print(F("IP Subnet:   "));    Serial.println(WiFi.subnetMask());
+        yield();  // For 300 baud
         C64Print(F("IP Gateway:  "));    Serial.println(WiFi.gatewayIP());
+        yield();  // For 300 baud
         C64Print(F("Wi-Fi SSID:  "));    Serial.println(WiFi.SSID());
+        yield();  // For 300 baud
         C64Print(F("MAC Address: "));    Serial.println(WiFi.macAddress());
+        yield();  // For 300 baud
         C64Print(F("DNS IP:      "));    Serial.println(WiFi.dnsIP());
-        C64Print(F("Hostanme:    "));    Serial.println(WiFi.hostname());
+        yield();  // For 300 baud
+        C64Print(F("Hostname:    "));    Serial.println(WiFi.hostname());
+        yield();  // For 300 baud
         C64Print(F("Firmware:    "));    C64Println(VERSION);
         //C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
+        yield();  // For 300 baud
 
         if (!powerup) {
             char at_settings[40];
@@ -1108,14 +1114,16 @@ void ShowInfo(boolean powerup)
                 Modem_dataSetReady, Modem_S0_AutoAnswer, (int)Modem_S2_EscapeCharacter,
                 Modem_suppressErrors);
             C64Print(F("CURRENT INIT:"));    C64Println(at_settings);
-            //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
+            yield();  // For 300 baud
+                      //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
             sprintf_P(at_settings, PSTR("\r\n E%d Q%d V%d &C%d X%d &K%d &S%d\r\n S0=%d S2=%d S99=%d"),
                 EEPROM.read(ADDR_MODEM_ECHO), EEPROM.read(ADDR_MODEM_QUIET), EEPROM.read(ADDR_MODEM_VERBOSE),
                 EEPROM.read(ADDR_MODEM_DCD), EEPROM.read(ADDR_MODEM_X_RESULT), EEPROM.read(ADDR_MODEM_FLOW),
                 EEPROM.read(ADDR_MODEM_DSR), EEPROM.read(ADDR_MODEM_S0_AUTOANS), EEPROM.read(ADDR_MODEM_S2_ESCAPE),
                 EEPROM.read(ADDR_MODEM_SUP_ERRORS));
             C64Print(F("SAVED INIT:  "));    C64Println(at_settings);
-        }
+            yield();  // For 300 baud
+        }        
     }
     else {
         //#else
@@ -1123,14 +1131,18 @@ void ShowInfo(boolean powerup)
             //C64Print(F("MAC Address: "));    C64Println(mac);
         C64Print(F("IP Address:  "));    Serial.println(WiFi.localIP());
         C64Print(F("IP Subnet:   "));    Serial.println(WiFi.subnetMask());
+        yield();  // For 300 baud
         C64Print(F("IP Gateway:  "));    Serial.println(WiFi.gatewayIP());
         C64Print(F("Wi-Fi SSID:  "));    Serial.println(WiFi.SSID());
+        yield();  // For 300 baud
         C64Print(F("MAC Address: "));    Serial.println(WiFi.macAddress());
         C64Print(F("DNS IP:      "));    Serial.println(WiFi.dnsIP());
+        yield();  // For 300 baud
         C64Print(F("Hostanme:    "));    Serial.println(WiFi.hostname());
         C64Print(F("Firmware:    "));    C64Println(VERSION);
         //C64Print(F("Listen port: "));    C64Serial.print(WiFlyLocalPort); C64Serial.println();
     }
+    yield();  // For 300 baud
 //#endif
 
 //#ifndef HAYES
@@ -1139,21 +1151,29 @@ void ShowInfo(boolean powerup)
     {
         char temp[40];
 
-        Display("Firmware:", true, 1);
-        sprintf_P(temp, PSTR(" %s"), VERSION);
-        Display(temp, false , 2);
+        yield();  // For 300 baud
 
-        Display("Baud Rate:", false, 4);
-        sprintf_P(temp, PSTR(" %u"), BAUD_RATE);
-        Display(temp, false, 5);
+        u8x8.clearDisplay();
+        u8x8.setCursor(0, 0);
+        u8x8.print("Firmware:");
+        u8x8.setCursor(1, 1);
+        u8x8.print(VERSION);
 
-        /*sprintf(temp, ("IP Address: %s"), (WiFi.localIP());
-        Display(temp, false, 3);
-        delay(1000);
+        u8x8.setCursor(0, 2);
+        u8x8.print("Baud Rate:");
+        u8x8.setCursor(1, 3);
+        u8x8.print(BAUD_RATE);
 
-        Display("SSID:", false, 4);
-        sprintf_P(temp, PSTR(" %s"), WiFi.SSID());
-        Display(temp, false, 5);*/
+        u8x8.setCursor(0, 4);
+        u8x8.print("IP Address:");
+        u8x8.setCursor(1, 5);
+        u8x8.print(WiFi.localIP());
+
+        u8x8.setCursor(0, 6);
+        u8x8.print("SSID:");
+        u8x8.setCursor(1, 7);
+        u8x8.print(WiFi.SSID());
+
         delay(3000);
     }
 #endif  // MICROVIEW    
@@ -1366,7 +1386,7 @@ void Connect(String host, int port, boolean raw)
         }
         else {
 //#else
-            DisplayBoth(("Connect Failed!"), true, 1);
+            DisplayBoth(("Connect Failed!"), true, 0);
 //#endif
         }
         //        if (Modem_DCDFollowsRemoteCarrier)
@@ -1461,7 +1481,7 @@ void TerminalMode()
 //#ifdef HAYES          
     //Modem_Disconnect(true);
 //#else
-    DisplayBoth(("Connection closed"), true, 1);
+    DisplayBoth(("Connection closed"), true, 0);
 //#endif
     if (Modem_DCDFollowsRemoteCarrier)
         digitalWrite(C64_DCD, Modem_ToggleCarrier(false));
@@ -1523,6 +1543,7 @@ inline void DoFlowControlModemToC64()
         //while (digitalRead(C64_RTS == LOW))   // If not...  C64 RTS and CTS are inverted.
         while (digitalRead(C64_RTS) == (Modem_isCtsRtsInverted ? LOW : HIGH))
         {
+            yield();
             //delay(5);
             //esp digitalWrite(WIFI_CTS, HIGH);     // ..stop data from Wi-Fi and wait
             ;
@@ -1539,6 +1560,7 @@ inline void DoFlowControlC64ToModem()
         {
             digitalWrite(C64_CTS, (Modem_isCtsRtsInverted ? LOW : HIGH));  // ..stop data from C64 and wait
                                                                                //digitalWrite(C64_CTS, LOW);     // ..stop data from C64 and wait
+            yield();
         }
         digitalWrite(C64_CTS, (Modem_isCtsRtsInverted ? HIGH : LOW));
         //digitalWrite(C64_CTS, HIGH);
@@ -1750,7 +1772,7 @@ void HayesEmulationMode()
         if (option != TIMEDOUT)   // Key pressed
         {
             ReadByte(C64Serial);    // eat character
-            Display(("OK"), true, 1);
+            Display(("OK"), true, 0);
             C64Serial.print(F("OK"));
             C64Serial.println();
         }
@@ -1759,7 +1781,7 @@ void HayesEmulationMode()
     }
     else
     {
-        Display(("OK"), true, 1);
+        Display(("OK"), true, 0);
         C64Serial.print(("OK"));
         C64Serial.println();
     }
@@ -1855,7 +1877,7 @@ void Modem_PrintResponse(byte code, String msg)
     uView.println(msg);
     uView.display();*/
 
-    Display(msg, false, 3);
+    Display(msg, false, 2);
 #endif
 }
 
@@ -1994,7 +2016,7 @@ void Modem_ProcessCommandBuffer()
         Modem_CommandBuffer[i] = toupper(charset_p_toascii_upper_only(Modem_CommandBuffer[i]));
     }
 
-    Display(Modem_CommandBuffer, true, 1);
+    Display(Modem_CommandBuffer, true, 0);
 
     // Define auto-start phone book entry
     if (strncmp(Modem_CommandBuffer, ("AT&PBAUTO="), 10) == 0)
@@ -2035,6 +2057,7 @@ void Modem_ProcessCommandBuffer()
             C64Serial.print(i + 1);
             C64Print(F(":"));
             C64Println(readEEPROMPhoneBook(ADDR_HOSTS + (i * ADDR_HOST_SIZE)));
+            yield();  // For 300 baud
         }
         C64Println();
         C64Print(F("Autostart: "));
@@ -2867,7 +2890,7 @@ void Modem_ProcessData()
 
 
                         if (escapeCount == 3) {
-                            Display("Escape!", true, 1);
+                            Display("Escape!", true, 0);
                             escapeReceived = true;
                             escapeCount = 0;
                             escapeTimer = 0;
@@ -2931,7 +2954,7 @@ void Modem_Loop()
             {
                 //wifly.println(F("CONNECTING..."));
 
-                Display(("INCOMING\nCALL"), true, 1);
+                Display(("INCOMING\nCALL"), true, 0);
                 Modem_Ring();
                 return;
             }
@@ -3194,7 +3217,7 @@ void Modem_Loop()
 
 
                         if (escapeCount == 3) {
-                            Display("Escape!", true, 1);
+                            Display("Escape!", true, 0);
                             escapeReceived = true;
                             escapeCount = 0;
                             escapeTimer = 0;
@@ -3258,20 +3281,53 @@ int freeRam()
     return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval);
 }
 
-// detbaud baud detection
+// detRate baud detection
 long detRate(int recpin)  // function to return valid received baud rate
                           // Note that the serial monitor has no 600 baud option and 300 baud
                           // doesn't seem to work with version 22 hardware serial library
 {
+    auto start = millis();
+    uint32_t timeout = 5000;
     unsigned long timer;
-    timer = millis();
+    timer = millis() + 10000;
+
+    /*u8x8.setCursor(0, 5);
+    u8x8.print(start);*/
+    /*delay(1000);
+    u8x8.setCursor(0, 6);
+    u8x8.print(millis() + 10000);
+    delay(10000);
+    u8x8.setCursor(0, 7);
+    u8x8.print("Go..");*/
 
     while (1)
     {
-        if (millis() - 5000 < timer)
+        yield();
+        u8x8.setCursor(0, 6);
+        //u8x8.print(millis());
+        u8x8.print(int((timeout - (millis() - start)) / 1000));
+
+        //if ((millis()+10000 - 5000) < timer) {
+        if (millis() - start > timeout) {
+            u8x8.setCursor(0, 6);
+            u8x8.print(" ");
+            u8x8.setCursor(0, 3);
+            u8x8.print("Time's up!");
+            u8x8.setCursor(0, 4);
+            u8x8.print("Defaulting to:");
+            u8x8.setCursor(0, 5);
+            u8x8.print(" ");
+            u8x8.print(BAUD_RATE);
+
+            delay(2000);
             return (0);
-        if (digitalRead(recpin) == 0)
+        }
+        if (digitalRead(recpin) == 0) {
+            //u8x8.setCursor(0, 3);
+            //u8x8.print("Key pressed");
+            //delay(2000);
             break;
+        }
     }
     long baud;
     long rate = pulseIn(recpin, LOW); // measure zero bit width from character. ASCII 'U' (01010101) provides the best results.
@@ -3296,6 +3352,10 @@ long detRate(int recpin)  // function to return valid received baud rate
         baud = 2400;
     else if (rate < 1200)
         baud = 1200;
+    else if (rate < 2400)
+        baud = 600;
+    else if (rate < 4800)
+        baud = 300;
     else
         baud = 0;
     return baud;
@@ -3361,7 +3421,7 @@ void processC64Inbound()
         escapeTimer = millis();   // Last time data was read
 
     if (escapeCount == 3) {
-        Display(("Escape!"), true, 1);
+        Display(("Escape!"), true, 0);
         escapeReceived = true;
         escapeCount = 0;
         escapeTimer = 0;
