@@ -2943,7 +2943,8 @@ void Modem_Loop()
             yield();
             DoFlowControlModemToC64();
             C64Serial.write(wifly.read());
-            delay(4);       // Slow things down a bit..
+            delay(10);       // Microview: Slow things down a bit (delay 4).
+                            // ESP8266: Slow things down a bit (delay 8).
         }
     }
     else
@@ -3010,9 +3011,10 @@ void Modem_Loop()
                                 {
                                     {
                                         DoFlowControlModemToC64();
-                                        C64Serial.write(data);
                                         if (BAUD_RATE >= 9600)
-                                            delay(1);       // Slow things down a bit..  1 seems to work with Desterm 3.02 at 9600.
+                                            delay(2);       // Microview: Slow things down a bit..  1 seems to work with Desterm 3.02 at 9600.
+                                                            // ESP8266:  2 works in Novaterm, 1 does not.
+                                        C64Serial.write(data);
                                     }
                                 }
                             }
