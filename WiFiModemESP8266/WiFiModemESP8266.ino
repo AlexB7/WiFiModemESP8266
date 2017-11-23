@@ -521,9 +521,9 @@ void loop()
                 PhoneBook();
                 break;
 
-                //case '3':
-                    //Incoming();
-                    //break;
+           case '3':
+                Incoming();
+                break;
 
             case '4':
                 Configuration();
@@ -1184,9 +1184,10 @@ void ShowInfo(boolean powerup)
 // ----------------------------------------------------------
 // Simple Incoming connection handling
 
-/*void Incoming()
+void Incoming()
 {
-    int localport = WiFlyLocalPort;
+    //int localport = WiFlyLocalPort;
+    int localport = 23;
 
     C64Print(F("\r\nIncoming port ("));
     C64Serial.print(localport);
@@ -1197,40 +1198,71 @@ void ShowInfo(boolean powerup)
     if (strport.length() > 0)
     {
         localport = strport.toInt();
-        if (setLocalPort(localport))
-            while (1);
+        /*if (setLocalPort(localport))
+            while (1);*/
     }
 
     WiFlyLocalPort = localport;
 
+    C64Print(F("\r\nWaiting for connection on port "));
+    C64Serial.println(WiFlyLocalPort);
+    C64Print(F("\r\nIP address: "));
+    C64Serial.println(WiFi.localIP());
+
+    WiFiServer server(WiFlyLocalPort);
+    server.begin();
+    server.setNoDelay(true);
+    C64Serial.println("Server started");
+    
     while (1)
     {
+        yield();
         // Force close any connections that were made before we started listening, as
         // the WiFly is always listening and accepting connections if a local port
         // is defined.  
-        wifly.closeForce();
-
-        C64Print(F("\r\nWaiting for connection on port "));
-        C64Serial.println(WiFlyLocalPort);
+        //wifly.closeForce();
+        wifly.stop();
 
         // Idle here until connected or cancelled
-        while (!wifly.connected())
+        while (1)
         {
+            /*if (server.hasClient()) {
+                if (!wifly || !wifly.connected()) {
+                    if (wifly) wifly.stop();
+                    wifly = server.available();
+                    break;
+                }
+                else {
+                    server.available().stop();
+                }
+            }*/
+
+            wifly = server.available();
+            if (wifly) {
+                break;
+            }
             if (C64Serial.available() > 0)  // Key hit
             {
                 C64Serial.read();  // Eat Character
                 C64Println(F("Cancelled"));
                 return;
             }
+            delay(1);
         }
+
+        //wifly = server.available();
+        wifly.flush();
 
         C64Println(F("Incoming Connection"));
         wifly.println(F("CONNECTING..."));
         //CheckTelnet();
         TerminalMode();
+        server.stop();
+        wifly.stop();
+        break;
     }
 }
-*/
+
 
 // ----------------------------------------------------------
 // Telnet Handling
