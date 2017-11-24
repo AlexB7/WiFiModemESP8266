@@ -71,10 +71,11 @@ Feb 24th, 2016: Alex Burger
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "ESP 0.12"
+#define VERSION "ESP 0.13b2"
 // Based on 0.12b5 with modem_loop fix.  
 
 unsigned int BAUD_RATE = 2400;
+unsigned char BAUD_RATE_FORCED = '0';
 
 // Configuration 0v3: Wifi Hardware, C64 Software.
 
@@ -193,8 +194,9 @@ int mode_Hayes = 1;    // 0 = Meny, 1 = Hayes
 // Microview has 1K
 #define ADDR_PETSCII       0
 #define ADDR_HAYES_MENU    1
-#define ADDR_BAUD_LO       2
-#define ADDR_BAUD_HI       3
+#define ADDR_BAUD          21        // For manually forcing baud rate
+#define ADDR_BAUD_LO       2        // Last set baud rate from auto-detect LO
+#define ADDR_BAUD_HI       3        // Last set baud rate from auto-detect HI
 #define ADDR_MODEM_ECHO         10
 #define ADDR_MODEM_FLOW         11
 #define ADDR_MODEM_VERBOSE      12
@@ -346,51 +348,71 @@ void loop()
                                         // Some computers have issues with 100 ohm resistor pack
 #endif
 
-    BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
+    BAUD_RATE_FORCED = (EEPROM.read(ADDR_BAUD));
 
-    if (BAUD_RATE != 300 && BAUD_RATE != 600 && BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200 &&
-        BAUD_RATE != 38400 && BAUD_RATE != 57600 && BAUD_RATE != 115200)
-        BAUD_RATE = 2400;
+    long detectedBaudRate;
 
-    //
-    // Baud rate detection
-    //
-    pinMode(C64_RxD, INPUT);
-    digitalWrite(C64_RxD, HIGH);
+    switch (BAUD_RATE_FORCED) {
+    case '0':         // Auto-detect
 
-    Display(("Baud Detection"), true, 0);
+        BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
+
+        if (BAUD_RATE != 300 && BAUD_RATE != 600 && BAUD_RATE != 1200 && BAUD_RATE != 2400 && BAUD_RATE != 4800 && BAUD_RATE != 9600 && BAUD_RATE != 19200 &&
+            BAUD_RATE != 38400 && BAUD_RATE != 57600 && BAUD_RATE != 115200)
+            BAUD_RATE = 2400;
+
+        //
+        // Baud rate detection
+        //
+        pinMode(C64_RxD, INPUT);
+        digitalWrite(C64_RxD, HIGH);
+
+        Display(("Baud Detection"), true, 0);
     
-    long detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
-                                               // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
-                                               // by having sending circuit send "U" characters.
-                                               // Returns 0 if none or under 1200 baud
+        detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
+                                                   // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
+                                                   // by having sending circuit send "U" characters.
+                                                   // Returns 0 if none or under 1200 baud
+                                                   //char temp[20];
+                                                   //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
+                                                   //Display(temp);
+        //long detectedBaudRate = BAUD_RATE;
+        if (detectedBaudRate == 300 || detectedBaudRate == 600 ||
+            detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 ||
+            detectedBaudRate == 9600 || detectedBaudRate == 19200 || detectedBaudRate == 38400 || 
+            detectedBaudRate == 57600 || detectedBaudRate == 115200)
+        {
+            char temp[6];
+            sprintf_P(temp, PSTR("%ld"), detectedBaudRate);
+            Display(temp, false, 1);
+            delay(3000);
 
-                                               //char temp[20];
-                                               //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
-                                               //Display(temp);
-    //long detectedBaudRate = BAUD_RATE;
-    if (detectedBaudRate == 300 || detectedBaudRate == 600 ||
-        detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 ||
-        detectedBaudRate == 9600 || detectedBaudRate == 19200 || detectedBaudRate == 38400 || 
-        detectedBaudRate == 57600 || detectedBaudRate == 115200)
-    {
-        char temp[6];
-        sprintf_P(temp, PSTR("%ld"), detectedBaudRate);
-        Display(temp, false, 1);
+            BAUD_RATE = detectedBaudRate;
+
+            byte a = BAUD_RATE / 256;
+            byte b = BAUD_RATE % 256;
+
+            updateEEPROMByte(ADDR_BAUD_LO, a);
+            updateEEPROMByte(ADDR_BAUD_HI, b);
+        }
+    
+        //
+        // Baud rate detection end
+        //
+        break;
+    
+    case '1':         // 1200 baud
+        BAUD_RATE = 1200;
+        //Display(("1200"), true, 0);
         delay(3000);
+        break;
 
-        BAUD_RATE = detectedBaudRate;
-
-        byte a = BAUD_RATE / 256;
-        byte b = BAUD_RATE % 256;
-
-        updateEEPROMByte(ADDR_BAUD_LO, a);
-        updateEEPROMByte(ADDR_BAUD_HI, b);
+    default:        // 2400 baud
+        BAUD_RATE = 2400;
+        //Display(("2400"), true, 0);
+        delay(3000);
+        break;
     }
-    
-    //
-    // Baud rate detection end
-    //
 
     C64Serial.begin(BAUD_RATE);
     delay(10);
@@ -1108,18 +1130,20 @@ void ShowInfo(boolean powerup)
         if (!powerup) {
             char at_settings[40];
             //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"), Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses, Modem_DCDFollowsRemoteCarrier, Modem_flowControl, Modem_S0_AutoAnswer);
-            sprintf_P(at_settings, PSTR("\r\n E%d Q%d V%d &C%d X%d &K%d &S%d\r\n S0=%d S2=%d S99=%d"),
+            sprintf_P(at_settings, PSTR("\r\n E%d Q%d V%d &C%d X%d &K%d &S%d *B%c\r\n S0=%d S2=%d S99=%d"),
                 Modem_EchoOn, Modem_QuietMode, Modem_VerboseResponses,
                 Modem_DCDFollowsRemoteCarrier, Modem_X_Result, Modem_flowControl,
-                Modem_dataSetReady, Modem_S0_AutoAnswer, (int)Modem_S2_EscapeCharacter,
+                Modem_dataSetReady, BAUD_RATE_FORCED,
+                Modem_S0_AutoAnswer, (int)Modem_S2_EscapeCharacter,
                 Modem_suppressErrors);
             C64Print(F("CURRENT INIT:"));    C64Println(at_settings);
             yield();  // For 300 baud
                       //sprintf_P(at_settings, PSTR("ATE%dQ%dV%d&C%d&K%dS0=%d"),EEPROM.read(ADDR_MODEM_ECHO),EEPROM.read(ADDR_MODEM_QUIET),EEPROM.read(ADDR_MODEM_VERBOSE),EEPROM.read(ADDR_MODEM_DCD),EEPROM.read(ADDR_MODEM_FLOW),EEPROM.read(ADDR_MODEM_S0_AUTOANS));
-            sprintf_P(at_settings, PSTR("\r\n E%d Q%d V%d &C%d X%d &K%d &S%d\r\n S0=%d S2=%d S99=%d"),
+            sprintf_P(at_settings, PSTR("\r\n E%d Q%d V%d &C%d X%d &K%d &S%d *B%c\r\n S0=%d S2=%d S99=%d"),
                 EEPROM.read(ADDR_MODEM_ECHO), EEPROM.read(ADDR_MODEM_QUIET), EEPROM.read(ADDR_MODEM_VERBOSE),
                 EEPROM.read(ADDR_MODEM_DCD), EEPROM.read(ADDR_MODEM_X_RESULT), EEPROM.read(ADDR_MODEM_FLOW),
-                EEPROM.read(ADDR_MODEM_DSR), EEPROM.read(ADDR_MODEM_S0_AUTOANS), EEPROM.read(ADDR_MODEM_S2_ESCAPE),
+                EEPROM.read(ADDR_MODEM_DSR), EEPROM.read(ADDR_BAUD),
+                EEPROM.read(ADDR_MODEM_S0_AUTOANS), EEPROM.read(ADDR_MODEM_S2_ESCAPE),
                 EEPROM.read(ADDR_MODEM_SUP_ERRORS));
             C64Print(F("SAVED INIT:  "));    C64Println(at_settings);
             yield();  // For 300 baud
@@ -1321,16 +1345,8 @@ int getPort(void)
 
 void Connect(String host, int port, boolean raw)
 {
-    if (host == F("5551212")) {
-        host = F("qlink.lyonlabs.org");
-        port = 5190;
-    }
-    else if (host == F("5551213")) {
-        host = F("q-link.net");
-        port = 5190;
-    }
 //#ifdef HAYES
-    else if (host == F("CS38")) {
+    if (host == F("CS38")) {
         host = F("www.commodoreserver.com");
         port = 1541;
         commodoreServer38k = true;
@@ -1469,29 +1485,25 @@ void TerminalMode()
                 if (data == NVT_IAC)
                 {
                     isTelnet = true;
-                    CheckTelnetInline();
                 }
                 else
                 {
                     isTelnet = false;
                 }
-                isFirstChar = false;
+            }
+
+            if (data == NVT_IAC && isTelnet)
+            {
+                {
+                    if (CheckTelnetInline())
+                        C64Serial.write(NVT_IAC);
+                }
             }
             else
             {
-                if (data == NVT_IAC && isTelnet)
                 {
-                    {
-                        if (CheckTelnetInline())
-                            C64Serial.write(NVT_IAC);
-                    }
-                }
-                else
-                {
-                    {
-                        DoFlowControlModemToC64();
-                        C64Serial.write(data);
-                    }
+                    DoFlowControlModemToC64();
+                    C64Serial.write(data);
                 }
             }
         }
@@ -1614,8 +1626,10 @@ boolean CheckTelnetInline()
     yield();
 
                                                         // First time through
-    if (isFirstChar)
+    if (isFirstChar) {
         SendTelnetParameters();                         // Start off with negotiating
+        isFirstChar = false;
+    }
 
     verbint = ReadByte(wifly);                          // receive negotiation verb character
 
@@ -2409,9 +2423,12 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
-                //case 'R':   // AT&R
-                //    RawTerminalMode();
-                //    break;
+                case 'R':   // AT&R = Reboot
+                    C64Println(F("Restarting."));
+                    C64Println();
+                    ESP.restart();
+                    while (1);
+                    break;
 
                 case 'M':   // AT&M
                     mode_Hayes = false;
@@ -2455,6 +2472,7 @@ void Modem_ProcessCommandBuffer()
                     updateEEPROMByte(ADDR_MODEM_X_RESULT, Modem_X_Result);
                     updateEEPROMByte(ADDR_MODEM_SUP_ERRORS, Modem_suppressErrors);
                     updateEEPROMByte(ADDR_MODEM_DSR, Modem_dataSetReady);
+                    updateEEPROMByte(ADDR_BAUD, BAUD_RATE_FORCED);
 
                     //if (!(wifly.save()))
                     //    errors++;
@@ -2471,6 +2489,19 @@ void Modem_ProcessCommandBuffer()
             case '*':               // AT* Moving &ssid, &pass and &key to * costs 56 flash but saves 26 mimimum RAM.
                 switch (Modem_CommandBuffer[i++])
                 {
+                case 'B':   // AT*B     Set baud rate
+                    char newBaudRate;
+
+                    newBaudRate = Modem_CommandBuffer[i++];
+
+                    if (newBaudRate >= '0' && newBaudRate <= '3')
+                    {
+                        BAUD_RATE_FORCED = newBaudRate;
+                    }
+                    else
+                        errors++;
+                    break;
+
                 case 'M':   // AT*M     Message sent to remote side when answering
                     switch (Modem_CommandBuffer[i++])
                     {
@@ -2575,10 +2606,12 @@ void Modem_ProcessCommandBuffer()
 
                 case 'T':
                 case 'P':
+                    removeSpaces(&Modem_CommandBuffer[i]);
 
                     switch (Modem_CommandBuffer[i++])
                     {
-                    case '#':
+                    case ',':       // ATD,
+                    case '#':       // ATD#
                         // Phonebook dial
                         numString[0] = Modem_CommandBuffer[i];
                         numString[1] = '\0';
@@ -2597,7 +2630,6 @@ void Modem_ProcessCommandBuffer()
 
                     default:
                         i--;
-                        removeSpaces(&Modem_CommandBuffer[i]);
                         Modem_Dialout(&Modem_CommandBuffer[i]);
                         suppressOkError = 1;
                         i = COMMAND_BUFFER_SIZE - 3;    // Make sure we don't try to process any more...
@@ -2605,8 +2637,10 @@ void Modem_ProcessCommandBuffer()
                     }
                     break;
 
-                case '#':
+                case ',':       // ATD,
+                case '#':       // ATD#
                     // Phonebook dial
+                    removeSpaces(&Modem_CommandBuffer[i]);
                     numString[0] = Modem_CommandBuffer[i];
                     numString[1] = '\0';
 
@@ -2624,7 +2658,6 @@ void Modem_ProcessCommandBuffer()
 
                 default:
                     i--;        // ATD
-                    removeSpaces(&Modem_CommandBuffer[i]);
                     Modem_Dialout(&Modem_CommandBuffer[i]);
                     suppressOkError = 1;
                     i = COMMAND_BUFFER_SIZE - 3;    // Make sure we don't try to process any more...
@@ -3021,35 +3054,31 @@ void Modem_Loop()
                                 if (data == NVT_IAC)
                                 {
                                     isTelnet = true;
-                                    CheckTelnetInline();
                                 }
                                 else
                                 {
                                     isTelnet = false;
                                 }
-                                isFirstChar = false;
+                            }
+                            
+                            if (data == NVT_IAC && isTelnet)
+                            {
+                                {
+                                    if (CheckTelnetInline())
+                                        C64Serial.write(NVT_IAC);
+                                }
+
                             }
                             else
                             {
-                                if (data == NVT_IAC && isTelnet)
                                 {
-                                    {
-                                        if (CheckTelnetInline())
-                                            C64Serial.write(NVT_IAC);
-                                    }
-
+                                    DoFlowControlModemToC64();
+                                    if (BAUD_RATE >= 9600)
+                                        delay(2);       // Microview: Slow things down a bit..  1 seems to work with Desterm 3.02 at 9600.
+                                                        // ESP8266:  2 works in Novaterm, 1 does not.
+                                    C64Serial.write(data);
                                 }
-                                else
-                                {
-                                    {
-                                        DoFlowControlModemToC64();
-                                        if (BAUD_RATE >= 9600)
-                                            delay(2);       // Microview: Slow things down a bit..  1 seems to work with Desterm 3.02 at 9600.
-                                                            // ESP8266:  2 works in Novaterm, 1 does not.
-                                        C64Serial.write(data);
-                                    }
-                                }
-                            }
+                            }                            
                         }
                     }
                 }
