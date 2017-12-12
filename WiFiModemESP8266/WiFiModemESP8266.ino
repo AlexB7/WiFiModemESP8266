@@ -71,7 +71,7 @@ Feb 24th, 2016: Alex Burger
 
 ;  // Keep this here to pacify the Arduino pre-processor
 
-#define VERSION "ESP 0.13b2"
+#define VERSION "ESP 0.13"
 // Based on 0.12b5 with modem_loop fix.  
 
 unsigned int BAUD_RATE = 2400;
@@ -348,12 +348,37 @@ void loop()
                                         // Some computers have issues with 100 ohm resistor pack
 #endif
 
+#ifdef HAYES
     BAUD_RATE_FORCED = (EEPROM.read(ADDR_BAUD));
+#else
+    BAUD_RATE_FORCED = '0';
+    updateEEPROMByte(ADDR_BAUD, BAUD_RATE_FORCED);     // Change to autodetect mode if they go back to Hayes..
+#endif
 
     long detectedBaudRate;
 
     switch (BAUD_RATE_FORCED) {
-    case '0':         // Auto-detect
+
+    
+    case '1':         // 1200 baud
+        BAUD_RATE = 1200;
+        Display(("1200"), true, 0);
+        delay(3000);
+        break;
+
+    case '2':       // 2400 baud
+        BAUD_RATE = 2400;
+        Display(("2400"), true, 0);
+        delay(3000);
+        break;
+
+    case '3':       // 9600 baud
+        BAUD_RATE = 9600;
+        Display(("9600"), true, 0);
+        delay(3000);
+        break;
+
+    default:        // Auto-detect
 
         BAUD_RATE = (EEPROM.read(ADDR_BAUD_LO) * 256 + EEPROM.read(ADDR_BAUD_HI));
 
@@ -368,18 +393,18 @@ void loop()
         digitalWrite(C64_RxD, HIGH);
 
         Display(("Baud Detection"), true, 0);
-    
+
         detectedBaudRate = detRate(C64_RxD);  // Function finds a standard baudrate of either
-                                                   // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
-                                                   // by having sending circuit send "U" characters.
-                                                   // Returns 0 if none or under 1200 baud
-                                                   //char temp[20];
-                                                   //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
-                                                   //Display(temp);
-        //long detectedBaudRate = BAUD_RATE;
+                                              // 1200,2400,4800,9600,14400,19200,28800,38400,57600,115200
+                                              // by having sending circuit send "U" characters.
+                                              // Returns 0 if none or under 1200 baud
+                                              //char temp[20];
+                                              //sprintf(temp, "Baud\ndetected:\n%ld", detectedBaudRate);
+                                              //Display(temp);
+                                              //long detectedBaudRate = BAUD_RATE;
         if (detectedBaudRate == 300 || detectedBaudRate == 600 ||
             detectedBaudRate == 1200 || detectedBaudRate == 2400 || detectedBaudRate == 4800 ||
-            detectedBaudRate == 9600 || detectedBaudRate == 19200 || detectedBaudRate == 38400 || 
+            detectedBaudRate == 9600 || detectedBaudRate == 19200 || detectedBaudRate == 38400 ||
             detectedBaudRate == 57600 || detectedBaudRate == 115200)
         {
             char temp[6];
@@ -395,23 +420,12 @@ void loop()
             updateEEPROMByte(ADDR_BAUD_LO, a);
             updateEEPROMByte(ADDR_BAUD_HI, b);
         }
-    
+
         //
         // Baud rate detection end
         //
         break;
     
-    case '1':         // 1200 baud
-        BAUD_RATE = 1200;
-        //Display(("1200"), true, 0);
-        delay(3000);
-        break;
-
-    default:        // 2400 baud
-        BAUD_RATE = 2400;
-        //Display(("2400"), true, 0);
-        delay(3000);
-        break;
     }
 
     C64Serial.begin(BAUD_RATE);
@@ -2402,6 +2416,7 @@ void Modem_ProcessCommandBuffer()
 
                 case 'F':   // AT&F
                     Modem_LoadDefaults(false);
+                    BAUD_RATE_FORCED = '0';
                     //if (wifly.isSleeping())
                     //    wake();
 
@@ -2494,7 +2509,7 @@ void Modem_ProcessCommandBuffer()
 
                     newBaudRate = Modem_CommandBuffer[i++];
 
-                    if (newBaudRate >= '0' && newBaudRate <= '3')
+                    if (newBaudRate >= '0' && newBaudRate <= '4')
                     {
                         BAUD_RATE_FORCED = newBaudRate;
                     }
